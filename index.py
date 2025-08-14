@@ -24,7 +24,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MILVUS_URI = os.getenv("MILVUS_URI")
 MILVUS_TOKEN = os.getenv("MILVUS_TOKEN")
 
-# Security check - fail if critical credentials are missing
+# Security check - fail if critical credentials are missing 
 if not OPENAI_API_KEY:
     raise ValueError("❌ CRITICAL: OPENAI_API_KEY environment variable is required")
 if not MILVUS_URI:
