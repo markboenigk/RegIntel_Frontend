@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+openai
+python-dotenv
+mmh3
+requests
+jinja2
+guardrails-ai
+pydantic[email]
+python-multipart
