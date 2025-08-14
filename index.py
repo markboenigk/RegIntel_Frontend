@@ -652,7 +652,7 @@ async def index(request: Request):
 async def chat(request: ChatRequest, client_request: Request):
     """Chat endpoint with RAG integration - SIMPLIFIED VERSION."""
     try:
-        # Get client IP for rate limiting
+        # Get client IP for rate limiting 
         client_ip = client_request.client.host or "unknown"
         print(f"🌐 DEBUG: Client IP detected: {client_ip}")
         print(f"🌐 DEBUG: Client request headers: {dict(client_request.headers)}")
