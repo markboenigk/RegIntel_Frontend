@@ -16,50 +16,12 @@ templates = Jinja2Templates(directory="templates")
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Serve the login page"""
-    # Check if template exists, if not return fallback
-    try:
-        # Try to get template info to see if it exists
-        template = templates.get_template("auth/login.html")
-        return templates.TemplateResponse("auth/login.html", {"request": request})
-    except Exception:
-        # Fallback to simple response if template doesn't exist
-        return HTMLResponse("""
-        <html>
-            <head><title>Login - RegIntel</title></head>
-            <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-                <h1>🔐 Login</h1>
-                <p>Login page is working! Template will be added later.</p>
-                <hr>
-                <p><strong>Status:</strong> ✅ Authentication system is running</p>
-                <p><strong>Next:</strong> Beautiful login form will be added</p>
-                <a href="/" style="color: #007bff;">← Back to Main App</a>
-            </body>
-        </html>
-        """)
+    return templates.TemplateResponse("auth/login.html", {"request": request})
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     """Serve the registration page"""
-    # Check if template exists, if not return fallback
-    try:
-        # Try to get template info to see if it exists
-        template = templates.get_template("auth/register.html")
-        return templates.TemplateResponse("auth/register.html", {"request": request})
-    except Exception:
-        # Fallback to simple response if template doesn't exist
-        return HTMLResponse("""
-        <html>
-            <head><title>Register - RegIntel</title></head>
-            <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px;">
-                <h1>📝 Register</h1>
-                <p>Registration page is working! Template will be added later.</p>
-                <hr>
-                <p><strong>Status:</strong> ✅ Authentication system is running</p>
-                <p><strong>Next:</strong> Beautiful registration form will be added</p>
-                <a href="/" style="color: #007bff;">← Back to Main App</a>
-            </body>
-        </html>
-        """)
+    return templates.TemplateResponse("auth/register.html", {"request": request})
 
 @router.post("/signup")
 async def signup(request: UserSignUp, response: Response):
@@ -98,7 +60,7 @@ async def signup(request: UserSignUp, response: Response):
                 secure=False,  # Set to False for local development
                 samesite="lax",  # More permissive for local testing
                 max_age=7*24*3600,  # 7 days
-                path="/auth/refresh"
+                path="/"
             )
             
             return {
@@ -173,7 +135,7 @@ async def signout(response: Response):
     try:
         # Clear authentication cookies
         response.delete_cookie("auth_token", path="/")
-        response.delete_cookie("refresh_token", path="/auth/refresh")
+        response.delete_cookie("refresh_token", path="/")
         
         return {"message": "Sign out successful"}
         
@@ -288,7 +250,34 @@ async def update_password(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Password update error: {str(e)}")
 
+@router.post("/change-password")
+async def change_password(
+    request: PasswordUpdate,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Change user password (alias for password-update)"""
+    return await update_password(request, current_user)
+
+@router.post("/delete-account")
+async def delete_account(current_user: UserProfile = Depends(get_current_user)):
+    """Delete user account"""
+    try:
+        supabase = supabase_config.get_client()
+        
+        # Delete user account
+        user_response = supabase.auth.admin.delete_user(current_user.id)
+        
+        return {"message": "Account deleted successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Account deletion error: {str(e)}")
+
 @router.get("/me")
 async def get_current_user_info(current_user: UserProfile = Depends(get_current_user)):
     """Get current user information (for API clients)"""
-    return current_user 
+    return current_user
+
+@router.get("/profile-page", response_class=HTMLResponse)
+async def profile_page(request: Request, current_user: UserProfile = Depends(get_current_user)):
+    """Serve the profile page"""
+    return templates.TemplateResponse("auth/profile.html", {"request": request}) 

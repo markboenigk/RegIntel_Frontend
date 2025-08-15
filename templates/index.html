@@ -15,10 +15,62 @@
     <div class="container">
         <header class="header">
             <div class="header-content">
-                <h1><i class="fas fa-robot"></i> ChatGPT RAG Chat</h1>
-                <p>Powered by OpenAI GPT and Milvus Vector Database</p>
-                <div class="collection-indicator" id="collectionIndicator"> 📰 RSS Feeds
-                    Collection </div>
+                <div class="header-left">
+                    <h1><i class="fas fa-robot"></i> ChatGPT RAG Chat</h1>
+                    <p>Powered by OpenAI GPT and Milvus Vector Database</p>
+                    <div class="collection-indicator" id="collectionIndicator"> 📰 RSS
+                        Feeds Collection </div>
+                </div>
+                <div class="header-right">
+                    <!-- Authentication UI --> {% if user %} <div id="authSection"
+                        class="auth-section">
+                        <div class="user-menu">
+                            <span id="userName" class="user-name">{{ user.full_name or
+                                user.email }}</span>
+                            <div class="user-dropdown">
+                                <button id="userMenuButton" class="user-menu-button">
+                                    <i class="fas fa-user-circle"></i>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                <div id="userDropdownMenu" class="user-dropdown-menu">
+                                    <a href="/auth/profile-page" class="dropdown-item">
+                                        <i class="fas fa-user"></i> Profile </a>
+                                    <a href="#" id="logoutButton" class="dropdown-item">
+                                        <i class="fas fa-sign-out-alt"></i> Logout </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="loginSection" class="login-section" style="display: none;">
+                        <a href="/auth/login" class="login-button">
+                            <i class="fas fa-sign-in-alt"></i> Login </a>
+                        <a href="/auth/register" class="register-button">
+                            <i class="fas fa-user-plus"></i> Register </a>
+                    </div> {% else %} <div id="authSection" class="auth-section"
+                        style="display: none;">
+                        <div class="user-menu">
+                            <span id="userName" class="user-name">User</span>
+                            <div class="user-dropdown">
+                                <button id="userMenuButton" class="user-menu-button">
+                                    <i class="fas fa-user-circle"></i>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                <div id="userDropdownMenu" class="user-dropdown-menu">
+                                    <a href="/auth/profile-page" class="dropdown-item">
+                                        <i class="fas fa-user"></i> Profile </a>
+                                    <a href="#" class="dropdown-item">
+                                        <i class="fas fa-sign-out-alt"></i> Logout </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="loginSection" class="login-section">
+                        <a href="/auth/login" class="login-button">
+                            <i class="fas fa-sign-in-alt"></i> Login </a>
+                        <a href="/auth/register" class="register-button">
+                            <i class="fas fa-user-plus"></i> Register </a>
+                    </div> {% endif %}
+                </div>
             </div>
         </header>
         <main class="main-content">
@@ -31,6 +83,14 @@
                             (Retrieval-Augmented Generation). I can help you with
                             questions and provide context-aware responses using the
                             knowledge base.
+                        </div>
+                    </div>
+                    <div class="message auth-info-message" id="authInfoMessage">
+                        <div class="message-content">
+                            <i class="fas fa-user-circle"></i> <strong>Chat
+                                freely!</strong> No login required to use the chatbot.
+                            <a href="/auth/login" class="auth-link">Login</a> to save
+                            your chat history and access personal features.
                         </div>
                     </div>
                 </div>

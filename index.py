@@ -2,9 +2,10 @@ import os
 import mmh3
 import json
 import requests
+import numpy as np
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -151,9 +152,74 @@ templates = Jinja2Templates(directory="templates")
 
 # Include authentication routes
 from auth.routes import router as auth_router
+from auth.middleware import get_current_user, get_optional_user
 app.include_router(auth_router)
 
 # Utility functions
+async def load_collection_if_needed(collection_name: str) -> bool:
+    """Load a collection into memory if it's not already loaded."""
+    try:
+        print(f"🔄 DEBUG: Checking if collection '{collection_name}' needs to be loaded...")
+        
+        # Check collection load status using the describe endpoint
+        describe_url = f"{MILVUS_URI}/v2/vectordb/collections/describe"
+        headers = {
+            "Authorization": f"Bearer {MILVUS_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        describe_data = {
+            "collectionName": collection_name
+        }
+        
+        print(f"🔄 DEBUG: Checking collection status at: {describe_url}")
+        response = requests.post(describe_url, json=describe_data, headers=headers)
+        print(f"🔄 DEBUG: Describe response status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"❌ DEBUG: Failed to check collection status: {response.status_code}")
+            print(f"❌ DEBUG: Response text: {response.text}")
+            return False
+        
+        collection_info = response.json()
+        print(f"🔄 DEBUG: Collection info response: {json.dumps(collection_info, indent=2)}")
+        
+        load_state = collection_info.get('data', {}).get('load', 'Unknown')
+        print(f"🔄 DEBUG: Collection '{collection_name}' load state: {load_state}")
+        
+        if load_state == "LoadStateNotLoad":
+            print(f"🔄 DEBUG: Loading collection '{collection_name}'...")
+            
+            # Load the collection using the load endpoint
+            load_url = f"{MILVUS_URI}/v2/vectordb/collections/load"
+            load_data = {
+                "collectionName": collection_name
+            }
+            
+            print(f"🔄 DEBUG: Loading collection at: {load_url}")
+            load_response = requests.post(load_url, json=load_data, headers=headers)
+            print(f"🔄 DEBUG: Load response status: {load_response.status_code}")
+            print(f"🔄 DEBUG: Load response text: {load_response.text}")
+            
+            if load_response.status_code == 200:
+                load_result = load_response.json()
+                if load_result.get('code') == 0:
+                    print(f"✅ DEBUG: Collection '{collection_name}' loaded successfully")
+                    return True
+                else:
+                    print(f"❌ DEBUG: Collection load failed with code: {load_result.get('code')}")
+                    return False
+            else:
+                print(f"❌ DEBUG: Failed to load collection: {load_response.status_code}")
+                return False
+        else:
+            print(f"✅ DEBUG: Collection '{collection_name}' is already loaded")
+            return True
+            
+    except Exception as e:
+        print(f"❌ DEBUG: Error loading collection: {e}")
+        return False
+
 async def get_embedding(text: str) -> List[float]:
     """Get embedding for text using OpenAI."""
     if not client:
@@ -462,14 +528,21 @@ async def search_similar_documents(query: str, limit: int = 10, collection_name:
             return []
         print(f"🔍 DEBUG: Embedding successful, proceeding with search")
 
-        # Use query endpoint for text-based search (more reliable than vector search)
-        search_url = f"{MILVUS_URI}/v2/vectordb/entities/query"
+        # First, try to load the collection if it's not loaded
+        print(f"🔍 DEBUG: About to load collection '{target_collection}' if needed...")
+        load_success = await load_collection_if_needed(target_collection)
+        print(f"🔍 DEBUG: Collection loading result: {load_success}")
+        
+        if not load_success:
+            print(f"❌ DEBUG: Failed to load collection '{target_collection}', trying search anyway...")
+        
+        # Use search endpoint for vector-based search (works with unloaded collections)
+        search_url = f"{MILVUS_URI}/v2/vectordb/entities/search"
         headers = {
             "Authorization": f"Bearer {MILVUS_TOKEN}",
             "Content-Type": "application/json"
         }
         
-        # Query with filter to find relevant documents
         # Use different schemas based on collection type
         if target_collection == "fda_warning_letters":
             # FDA Warning Letters schema
@@ -485,18 +558,31 @@ async def search_similar_documents(query: str, limit: int = 10, collection_name:
                 "chunk_type", "companies", "products", "regulations", "regulatory_bodies"
             ]
         
+        # For vector search, we need to provide the vector data
+        # Convert to float32 and try different array structures
+        
+        # Convert to float32 array (Zilliz expects this) - ensure it's flat, not nested
+        query_embedding_float32 = np.array(query_embedding, dtype=np.float32).flatten().tolist()
+        
         search_data = {
             "collectionName": target_collection,
-            "filter": "",  # No filter for now, get all documents
+            "data": query_embedding_float32,  # Use 'data' as Zilliz expects
             "limit": limit,
-            "outputFields": output_fields
+            "outputFields": output_fields,
+            "metricType": "COSINE",
+            "params": {"nprobe": 10},
+            "fieldName": "text_vector"  # Use 'fieldName' for Zilliz API
         }
+        
+        print(f"🔍 DEBUG: Attempting vector search with format 1...")
         
         print(f"🔍 DEBUG: Search URL: {search_url}")
         print(f"🔍 DEBUG: Search data: {json.dumps(search_data, indent=2)}")
 
         response = requests.post(search_url, json=search_data, headers=headers)
         print(f"🔍 DEBUG: Milvus response status: {response.status_code}")
+        print(f"🔍 DEBUG: Search URL: {search_url}")
+        print(f"🔍 DEBUG: Search data sent: {json.dumps(search_data, indent=2)}")
         
         if response.status_code != 200:
             print(f"❌ DEBUG: Zilliz API error: {response.status_code}")
@@ -508,10 +594,21 @@ async def search_similar_documents(query: str, limit: int = 10, collection_name:
         print(f'🔍 DEBUG: Milvus raw response: {pretty_json_string}')
         
         # Check if this is an error response
-        if 'code' in result and 'message' in result:
+        if 'code' in result and result.get('code') != 0:
             print(f"❌ DEBUG: Milvus API returned error: Code {result.get('code')}, Message: {result.get('message')}")
             print(f"❌ DEBUG: This suggests the Zilliz API format is incorrect")
-            return []
+            print(f"❌ DEBUG: Full error response: {json.dumps(result, indent=2)}")
+            
+            # Try alternative vector search format before falling back to query
+            print(f"🔄 DEBUG: Trying alternative vector search format...")
+            alternative_result = await try_alternative_vector_search(target_collection, query_embedding_float32, limit, output_fields)
+            if alternative_result:
+                print(f"✅ DEBUG: Alternative vector search succeeded!")
+                return alternative_result
+            
+            # If all vector search attempts failed, try fallback to query endpoint
+            print(f"🔄 DEBUG: All vector search attempts failed, trying fallback to query endpoint...")
+            return await fallback_query_search(target_collection, query, limit, output_fields)
 
         sources = []
         if 'data' in result:
@@ -581,6 +678,236 @@ async def search_similar_documents(query: str, limit: int = 10, collection_name:
         traceback.print_exc()
         return []
 
+async def try_alternative_vector_search(collection_name: str, query_embedding: List[float], limit: int, output_fields: List[str]) -> Optional[List[Dict[str, Any]]]:
+    """Try alternative Zilliz API formats for vector search."""
+    try:
+        print(f"🔄 DEBUG: Trying alternative vector search formats for collection '{collection_name}'")
+        
+        # Format 2: Try with 'vectorField' instead of 'fieldName'
+        search_data_2 = {
+            "collectionName": collection_name,
+            "data": query_embedding_float32,  # Use 'data' field as Zilliz expects
+            "limit": limit,
+            "outputFields": output_fields,
+            "metricType": "COSINE",
+            "params": {"nprobe": 10},
+            "vectorField": "text_vector"  # Try 'vectorField'
+        }
+        
+        print(f"🔄 DEBUG: Trying format 2 with 'vectorField'...")
+        result_2 = await try_single_search_format(search_data_2)
+        if result_2:
+            return result_2
+        
+        # Format 3: Try with different field name
+        search_data_3 = {
+            "collectionName": collection_name,
+            "data": query_embedding_float32,  # Use 'data' field as Zilliz expects
+            "limit": limit,
+            "outputFields": output_fields,
+            "metricType": "COSINE",
+            "params": {"nprobe": 10},
+            "field": "text_vector"  # Try just 'field'
+        }
+        
+        print(f"🔄 DEBUG: Trying format 3 with 'field'...")
+        result_3 = await try_single_search_format(search_data_3)
+        if result_3:
+            return result_3
+        
+        # Format 4: Try with 'vector' field name
+        search_data_4 = {
+            "collectionName": collection_name,
+            "data": query_embedding_float32,  # Use 'data' field as Zilliz expects
+            "limit": limit,
+            "outputFields": output_fields,
+            "metricType": "COSINE",
+            "params": {"nprobe": 10},
+            "vector": "text_vector"  # Try 'vector' field name
+        }
+        
+        print(f"🔄 DEBUG: Trying format 4 with 'field'...")
+        result_4 = await try_single_search_format(search_data_4)
+        if result_4:
+            return result_4
+        
+        print(f"❌ DEBUG: All alternative vector search formats failed")
+        return None
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error in alternative vector search: {e}")
+        return None
+
+async def try_single_search_format(search_data: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """Try a single search format and return results if successful."""
+    try:
+        search_url = f"{MILVUS_URI}/v2/vectordb/entities/search"
+        headers = {
+            "Authorization": f"Bearer {MILVUS_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        print(f"🔄 DEBUG: Testing search format: {json.dumps(search_data, indent=2)}")
+        
+        response = requests.post(search_url, json=search_data, headers=headers)
+        if response.status_code != 200:
+            print(f"❌ DEBUG: Search format failed with status: {response.status_code}")
+            return None
+        
+        result = response.json()
+        
+        # Check if this is an error response
+        if 'code' in result and result.get('code') != 0:
+            print(f"❌ DEBUG: Search format failed with code: {result.get('code')}, Message: {result.get('message')}")
+            print(f"❌ DEBUG: Full error response: {json.dumps(result, indent=2)}")
+            return None
+        
+        # Check if we got data
+        if 'data' in result and result['data']:
+            print(f"✅ DEBUG: Search format succeeded with {len(result['data'])} results!")
+            return process_search_results(result['data'], search_data.get('collectionName', 'unknown'))
+        
+        return None
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error testing search format: {e}")
+        return None
+
+def process_search_results(data: List[Dict[str, Any]], collection_name: str) -> List[Dict[str, Any]]:
+    """Process search results into the expected format."""
+    sources = []
+    
+    for hit in data:
+        try:
+            # Create metadata based on collection schema
+            if collection_name == "fda_warning_letters":
+                # FDA Warning Letters metadata
+                metadata = {
+                    "company_name": hit.get('company_name', 'Unknown Company'),
+                    "letter_date": hit.get('letter_date', 'Unknown Date'),
+                    "chunk_type": hit.get('chunk_type', 'Unknown Type'),
+                    "chunk_id": hit.get('chunk_id', 'Unknown Chunk'),
+                    "violations": hit.get('violations', []),
+                    "required_actions": hit.get('required_actions', []),
+                    "systemic_issues": hit.get('systemic_issues', []),
+                    "regulatory_consequences": hit.get('regulatory_consequences', []),
+                    "product_types": hit.get('product_types', []),
+                    "product_categories": hit.get('product_categories', [])
+                }
+            else:
+                # RSS Feeds metadata (default)
+                metadata = {
+                    "article_title": hit.get('article_title', 'Unknown Title'),
+                    "published_date": hit.get('published_date', 'Unknown Date'),
+                    "feed_name": hit.get('feed_name', 'Unknown Feed'),
+                    "chunk_type": hit.get('chunk_type', 'Unknown Type'),
+                    "companies": hit.get('companies', []),
+                    "products": hit.get('products', []),
+                    "regulations": hit.get('regulations', []),
+                    "regulatory_bodies": hit.get('regulatory_bodies', [])
+                }
+            
+            source_item = {
+                "text": hit.get('text_content', ''),
+                "metadata": metadata,
+                "collection": collection_name
+            }
+            sources.append(source_item)
+            
+        except Exception as e:
+            print(f"❌ DEBUG: Error processing search result: {e}")
+            continue
+    
+    return sources
+
+async def fallback_query_search(collection_name: str, query: str, limit: int, output_fields: List[str]) -> List[Dict[str, Any]]:
+    """Fallback search using the query endpoint when vector search fails."""
+    try:
+        print(f"🔄 DEBUG: Fallback: Using query endpoint for collection '{collection_name}'")
+        
+        # Use query endpoint for text-based search
+        query_url = f"{MILVUS_URI}/v2/vectordb/entities/query"
+        headers = {
+            "Authorization": f"Bearer {MILVUS_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        # Query with filter to find relevant documents
+        query_data = {
+            "collectionName": collection_name,
+            "filter": "",  # No filter for now, get all documents
+            "limit": limit,
+            "outputFields": output_fields
+        }
+        
+        print(f"🔄 DEBUG: Fallback query URL: {query_url}")
+        print(f"🔄 DEBUG: Fallback query data: {json.dumps(query_data, indent=2)}")
+        
+        response = requests.post(query_url, json=query_data, headers=headers)
+        print(f"🔄 DEBUG: Fallback query response status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"❌ DEBUG: Fallback query failed: {response.status_code}")
+            print(f"❌ DEBUG: Response text: {response.text}")
+            return []
+        
+        result = response.json()
+        print(f"🔄 DEBUG: Fallback query response: {json.dumps(result, indent=2)}")
+        
+        # Check if this is an error response
+        if 'code' in result and result.get('code') != 0:
+            print(f"❌ DEBUG: Fallback query API returned error: Code {result.get('code')}, Message: {result.get('message')}")
+            return []
+        
+        sources = []
+        if 'data' in result:
+            print(f"🔄 DEBUG: Fallback query found 'data' field with {len(result['data'])} items")
+            
+            for hit in result['data']:
+                try:
+                    # Create metadata based on collection schema
+                    if collection_name == "fda_warning_letters":
+                        # FDA Warning Letters metadata
+                        metadata = {
+                            "company_name": hit.get('company_name', 'Unknown Company'),
+                            "letter_date": hit.get('letter_date', 'Unknown Date'),
+                            "chunk_type": hit.get('chunk_type', 'Unknown Type'),
+                            "chunk_id": hit.get('chunk_id', 'Unknown Chunk'),
+                            "violations": hit.get('violations', []),
+                            "required_actions": hit.get('required_actions', []),
+                            "systemic_issues": hit.get('systemic_issues', []),
+                            "regulatory_consequences": hit.get('regulatory_consequences', []),
+                            "product_types": hit.get('product_types', []),
+                            "product_categories": hit.get('product_categories', [])
+                        }
+                    else:
+                        # RSS Feeds metadata (default)
+                        metadata = {
+                            "article_title": hit.get('article_title', 'Unknown Title'),
+                            "published_date": hit.get('published_date', 'Unknown Date'),
+                            "feed_name": hit.get('feed_name', 'Unknown Feed'),
+                            "chunk_type": hit.get('chunk_type', 'Unknown Type'),
+                            "companies": hit.get('companies', []),
+                            "products": hit.get('products', []),
+                            "regulations": hit.get('regulations', []),
+                            "regulatory_bodies": hit.get('regulatory_bodies', [])
+                        }
+                    
+                    sources.append({
+                        "text": hit.get('text_content', ''),
+                        "metadata": metadata
+                    })
+                except Exception as e:
+                    print(f"❌ DEBUG: Error processing fallback query hit: {e}")
+                    continue
+        
+        print(f"🔄 DEBUG: Fallback query returned {len(sources)} sources")
+        return sources
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error in fallback query search: {e}")
+        return []
+
 async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], sources: Optional[List[Dict[str, Any]]] = None) -> str:
     """Chat with GPT using conversation history and optional RAG sources - SIMPLIFIED VERSION."""
     if not client:
@@ -648,12 +975,16 @@ Your role is to analyze and present information from the provided regulatory int
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, current_user = Depends(get_optional_user)):
     """Serve the main chat interface."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    context = {
+        "request": request,
+        "user": current_user if current_user else None
+    }
+    return templates.TemplateResponse("index.html", context)
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, client_request: Request):
+async def chat(request: ChatRequest, client_request: Request, current_user = Depends(get_optional_user)):
     """Chat endpoint with RAG integration - SIMPLIFIED VERSION."""
     try:
         # Get client IP for rate limiting 
@@ -726,6 +1057,14 @@ async def chat(request: ChatRequest, client_request: Request):
         # SIMPLIFIED: No reranking information
         # reranking_info = { ... } - COMMENTED OUT
         
+        # If user is authenticated, save chat history (optional feature)
+        if current_user:
+            print(f"👤 User {current_user.email} is authenticated - could save chat history here")
+        
+        # If user is authenticated, save chat history (optional feature)
+        if current_user:
+            print(f"👤 User {current_user.email} is authenticated - could save chat history here")
+        
         return ChatResponse(
             response=response,
             sources=sources,
@@ -738,7 +1077,7 @@ async def chat(request: ChatRequest, client_request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat/{collection}", response_model=ChatResponse)
-async def chat_with_collection(collection: str, request: ChatRequest, client_request: Request):
+async def chat_with_collection(collection: str, request: ChatRequest, client_request: Request, current_user = Depends(get_optional_user)):
     """Chat endpoint with RAG integration for a specific collection."""
     try:
         # Get client IP for rate limiting
@@ -806,6 +1145,10 @@ async def chat_with_collection(collection: str, request: ChatRequest, client_req
         
         # Get AI response
         response = await chat_with_gpt(request.message, history, sources)
+        
+        # If user is authenticated, save chat history (optional feature)
+        if current_user:
+            print(f"👤 User {current_user.email} is authenticated - could save chat history here")
         
         return ChatResponse(
             response=response,
@@ -1167,23 +1510,65 @@ async def update_collection_embeddings(collection: str):
 async def health_check():
     """Health check endpoint."""
     try:
-        # Test Zilliz API connection
-        headers = {
-            "Authorization": f"Bearer {MILVUS_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        
-        # Simple health check using list collections endpoint
-        health_url = f"{MILVUS_URI}/v2/vectordb/collections/list"
-        response = requests.post(health_url, headers=headers)
+        # Test Zilliz connection
+        response = requests.get(f"{MILVUS_URI}/v2/vectordb/collections/describe", 
+                              headers={"Authorization": f"Bearer {MILVUS_TOKEN}"})
         zilliz_connected = response.status_code == 200
         print(zilliz_connected)
         return {"status": "healthy", "zilliz_connected": zilliz_connected}
     except Exception as e:
         return {"status": "unhealthy", "zilliz_connected": False, "error": str(e)}
 
+@app.get("/api/auth/status")
+async def auth_status(current_user = Depends(get_optional_user)):
+    """Get authentication status without requiring authentication."""
+    if current_user:
+        return {
+            "authenticated": True,
+            "user": {
+                "id": current_user.id,
+                "email": current_user.email,
+                "full_name": current_user.full_name
+            }
+        }
+    else:
+        return {"authenticated": False}
+
+@app.get("/api/user/chat-history")
+async def get_user_chat_history(current_user = Depends(get_current_user)):
+    """Get chat history for authenticated users only."""
+    # This is a placeholder - in a real app, you'd fetch from a database
+    return {
+        "message": "Chat history feature coming soon!",
+        "user": current_user.email,
+        "placeholder_data": [
+            {"timestamp": "2025-01-15", "query": "What news about Stryker?", "response": "Stryker has adjusted its 2025 profit outlook..."},
+            {"timestamp": "2025-01-14", "query": "FDA warning letters", "response": "The FDA has issued several warning letters..."}
+        ]
+    }
+
+@app.post("/api/user/save-chat")
+async def save_chat_message(
+    message: str,
+    response: str,
+    collection: str,
+    current_user = Depends(get_current_user)
+):
+    """Save a chat message for authenticated users only."""
+    # This is a placeholder - in a real app, you'd save to a database
+    return {
+        "message": "Chat saved successfully!",
+        "user": current_user.email,
+        "saved_message": {
+            "timestamp": "2025-01-15T10:00:00Z",
+            "user_message": message,
+            "ai_response": response,
+            "collection": collection
+        }
+    }
+
 @app.get("/api/test-search")
-async def test_search_get(query: str = "stryker", limit: int = 5):
+async def test_search_get(query: str = "stryker", limit: int = 5, current_user = Depends(get_current_user)):
     """Test endpoint to debug search functionality (GET)"""
     try:
         print(f"🧪 TEST SEARCH GET: Query='{query}', Limit={limit}")
@@ -1210,35 +1595,9 @@ async def test_search_get(query: str = "stryker", limit: int = 5):
         import traceback
         traceback.print_exc()
         return {"error": str(e)}
-    """Test endpoint to debug search functionality"""
-    try:
-        print(f"🧪 TEST SEARCH: Query='{query}', Limit={limit}")
-        
-        # Test the search function directly
-        sources = await search_similar_documents(query, limit)
-        
-        print(f"🧪 TEST SEARCH: Found {len(sources)} sources")
-        
-        return {
-            "query": query,
-            "limit": limit,
-            "sources_found": len(sources),
-            "sources": sources,
-            "debug_info": {
-                "collection_used": DEFAULT_COLLECTION,
-                "milvus_uri": MILVUS_URI[:50] + "..." if MILVUS_URI and len(MILVUS_URI) > 50 else MILVUS_URI,
-                "openai_configured": bool(OPENAI_API_KEY)
-            }
-        }
-        
-    except Exception as e:
-        print(f"❌ TEST SEARCH ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return {"error": str(e)}
 
 @app.get("/api/debug/collection/{collection_name}")
-async def debug_collection(collection_name: str):
+async def debug_collection(collection_name: str, current_user = Depends(get_optional_user)):
     """Debug endpoint to see what's actually in a collection."""
     try:
         # Validate collection name

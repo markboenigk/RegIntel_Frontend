@@ -11,6 +11,7 @@ class ChatApp {
         this.loadSettings();
         this.checkHealth();
         this.autoResizeTextarea();
+        this.checkAuthStatus();
     }
 
     bindEvents() {
@@ -43,6 +44,12 @@ class ChatApp {
 
         // Test configuration
         document.getElementById('testConfigButton').addEventListener('click', () => this.testConfiguration());
+
+        // Authentication events
+        document.getElementById('logoutButton').addEventListener('click', (e) => {
+            e.preventDefault();
+            this.logout();
+        });
 
         // Modal close on outside click
         window.addEventListener('click', (e) => {
@@ -416,19 +423,19 @@ class ChatApp {
         this.addMessageToChat('system', `Switched to ${collectionLabels[collectionName]} collection. You can now ask questions about this data.`);
     }
 
-        updateCollectionDisplay(collectionName) {
+    updateCollectionDisplay(collectionName) {
         // Update any UI elements that show the current collection
         const collectionLabels = {
             'rss_feeds': '📰 RSS Feeds Collection',
             'fda_warning_letters': '⚠️ FDA Warning Letters Collection'
         };
-        
+
         // Update the collection indicator in the header
         const indicator = document.getElementById('collectionIndicator');
         if (indicator) {
             indicator.textContent = collectionLabels[collectionName];
         }
-        
+
         console.log(`Current collection: ${collectionLabels[collectionName]}`);
     }
 
@@ -436,6 +443,87 @@ class ChatApp {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // Authentication Methods
+    async checkAuthStatus() {
+        try {
+            const response = await fetch('/api/auth/status');
+            if (response.ok) {
+                const authData = await response.json();
+                if (authData.authenticated) {
+                    this.showAuthenticatedUser(authData.user);
+                    this.enablePersonalFeatures();
+                } else {
+                    this.showUnauthenticatedUser();
+                    this.disablePersonalFeatures();
+                }
+            } else {
+                this.showUnauthenticatedUser();
+                this.disablePersonalFeatures();
+            }
+        } catch (error) {
+            console.log('User not authenticated');
+            this.showUnauthenticatedUser();
+            this.disablePersonalFeatures();
+        }
+    }
+
+    showAuthenticatedUser(user) {
+        document.getElementById('authSection').style.display = 'flex';
+        document.getElementById('loginSection').style.display = 'none';
+        document.getElementById('userName').textContent = user.full_name || user.email;
+        
+        // Hide auth info message for authenticated users
+        const authInfoMessage = document.getElementById('authInfoMessage');
+        if (authInfoMessage) {
+            authInfoMessage.style.display = 'none';
+        }
+    }
+
+    showUnauthenticatedUser() {
+        document.getElementById('authSection').style.display = 'none';
+        document.getElementById('loginSection').style.display = 'flex';
+        
+        // Show auth info message for unauthenticated users
+        const authInfoMessage = document.getElementById('authInfoMessage');
+        if (authInfoMessage) {
+            authInfoMessage.style.display = 'block';
+        }
+    }
+
+    async logout() {
+        try {
+            const response = await fetch('/auth/signout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                this.showUnauthenticatedUser();
+                this.disablePersonalFeatures();
+                // Redirect to home page
+                window.location.href = '/';
+            } else {
+                console.error('Logout failed');
+            }
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+    }
+
+    enablePersonalFeatures() {
+        console.log('🔓 Enabling personal features for authenticated user');
+        // Add personal features like chat history, saved conversations, etc.
+        // For now, just log that features are enabled
+    }
+
+    disablePersonalFeatures() {
+        console.log('🔒 Disabling personal features for unauthenticated user');
+        // Remove personal features - chat still works but no history saved
+        // For now, just log that features are disabled
     }
 }
 
