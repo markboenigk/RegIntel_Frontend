@@ -8,3 +8,4 @@ jinja2
 guardrails-ai
 pydantic[email]
 python-multipart
+httpx
