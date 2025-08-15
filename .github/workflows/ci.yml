@@ -23,8 +23,9 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           MILVUS_URI: ${{ secrets.MILVUS_URI }}
           MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
           # Variables (non-sensitive)
           ENABLE_RERANKING: ${{ vars.ENABLE_RERANKING }}
@@ -43,6 +44,7 @@ jobs:
           echo "   MILVUS_TOKEN: ✅ Set"
           echo "   SUPABASE_SERVICE_KEY: ✅ Set"
           echo "   SUPABASE_URL: ✅ Set"
+          echo "   SUPABASE_ANON_KEY: ✅ Set"
           echo "   ENABLE_RERANKING: ${{ vars.ENABLE_RERANKING }}"
           echo "   MAX_MESSAGE_LENGTH: ${{ vars.MAX_MESSAGE_LENGTH }}"
           echo "   RATE_LIMIT_REQUESTS: ${{ vars.RATE_LIMIT_REQUESTS }}"
@@ -57,8 +59,9 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           MILVUS_URI: ${{ secrets.MILVUS_URI }}
           MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
           # Variables (non-sensitive)
           ENABLE_RERANKING: ${{ vars.ENABLE_RERANKING }}
@@ -132,6 +135,8 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           MILVUS_URI: ${{ secrets.MILVUS_URI }}
           MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           MAX_MESSAGE_LENGTH: ${{ vars.MAX_MESSAGE_LENGTH }}
           RATE_LIMIT_REQUESTS: ${{ vars.RATE_LIMIT_REQUESTS }}
           RATE_LIMIT_WINDOW: ${{ vars.RATE_LIMIT_WINDOW }}

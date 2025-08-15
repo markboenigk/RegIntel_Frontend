@@ -5,7 +5,7 @@ Milvus Client for RSS Feeds RAG
 This module handles all Milvus operations including:
 - Connection management
 - Data insertion
-- Vector search
+- Vector search  
 - Collection management
 """
 
