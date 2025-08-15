@@ -149,6 +149,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Templates
 templates = Jinja2Templates(directory="templates")
 
+# Include authentication routes
+from auth.routes import router as auth_router
+app.include_router(auth_router)
+
 # Utility functions
 async def get_embedding(text: str) -> List[float]:
     """Get embedding for text using OpenAI."""

@@ -11,3 +11,7 @@ httpx
 pymilvus
 boto3
 botocore
+supabase
+python-jose[cryptography]
+passlib[bcrypt]
+itsdangerous
