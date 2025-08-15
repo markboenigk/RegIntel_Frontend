@@ -12,3 +12,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Test files (contain sensitive test data)
+test_*.py
+*_test.py
+test_*.json
+production_test_*.json

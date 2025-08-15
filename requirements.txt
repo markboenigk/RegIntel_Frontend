@@ -5,7 +5,9 @@ python-dotenv
 mmh3
 requests
 jinja2
-guardrails-ai
 pydantic[email]
 python-multipart
 httpx
+pymilvus
+boto3
+botocore
