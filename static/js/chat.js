@@ -572,29 +572,67 @@ class ChatApp {
 
     async loadLatestFDAWarningLetters() {
         try {
-            const response = await fetch('/api/search?query=warning%20letter&collection=fda_warning_letters&limit=5');
+            console.log('🔍 Loading latest FDA warning letters from Supabase...');
+            console.log('🔍 Making request to /api/warning-letters/latest?limit=10');
+
+            // Use the new Supabase endpoint
+            const response = await fetch('/api/warning-letters/latest?limit=10');
+            console.log('🔍 Response received:', response);
+            console.log('🔍 Response status:', response.status);
+            console.log('🔍 Response ok:', response.ok);
+
             const data = await response.json();
+            console.log('🔍 Response data:', data);
 
             const tbody = document.getElementById('fdaWarningLettersBody');
-            if (!tbody) return;
+            console.log('🔍 Found tbody element:', tbody);
+            if (!tbody) {
+                console.error('❌ No tbody element found for FDA warning letters');
+                return;
+            }
 
-            if (data.sources && data.sources.length > 0) {
-                tbody.innerHTML = data.sources.map(source => `
+            if (data.success && data.warning_letters && data.warning_letters.length > 0) {
+                console.log(`✅ Loaded ${data.warning_letters.length} warning letters from Supabase`);
+                console.log('🔍 First warning letter:', data.warning_letters[0]);
+
+                tbody.innerHTML = data.warning_letters.map(letter => `
                     <tr>
-                        <td>${this.formatDate(source.metadata?.date || source.metadata?.published_date || 'N/A')}</td>
-                        <td>${source.metadata?.company || source.metadata?.issuer || 'N/A'}</td>
-                        <td>${this.truncateText(source.metadata?.subject || source.content || 'N/A', 60)}</td>
-                        <td><span class="status-badge warning">Active</span></td>
+                        <td>${this.formatDate(letter.letter_date)}</td>
+                        <td>${this.escapeHtml(letter.company_name)}</td>
+                        <td>${this.escapeHtml(letter.subject)}</td>
                     </tr>
                 `).join('');
+
+                console.log('🔍 Updated tbody innerHTML');
+
+                // Show success message
+                this.showTableSuccessMessage('fdaWarningLettersTable', `Successfully loaded ${data.warning_letters.length} warning letters from Supabase`);
             } else {
-                tbody.innerHTML = '<tr><td colspan="4" class="no-data">No warning letters found</td></tr>';
+                console.log('⚠️ No warning letters found or error occurred:', data.error || 'No data');
+                console.log('🔍 Data structure:', data);
+                tbody.innerHTML = '<tr><td colspan="3" class="no-data">No warning letters found</td></tr>';
             }
         } catch (error) {
-            console.error('Failed to load FDA warning letters:', error);
+            console.error('❌ Failed to load FDA warning letters from Supabase:', error);
+            console.error('❌ Error details:', error.message, error.stack);
             const tbody = document.getElementById('fdaWarningLettersBody');
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="4" class="error-message">Failed to load data</td></tr>';
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="3" class="error-message">
+                            <div style="text-align: center; padding: 20px;">
+                                <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 24px; margin-bottom: 10px;"></i>
+                                <div>Failed to load warning letters from Supabase</div>
+                                <div style="font-size: 0.8rem; margin-top: 5px; color: #86868b;">
+                                    Error: ${error.message || 'Unknown error'}
+                                </div>
+                                <button onclick="window.location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #ff6b6b; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                                    <i class="fas fa-redo"></i> Retry
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
             }
         }
     }
@@ -695,6 +733,45 @@ class ChatApp {
         }
 
         console.log(`Current collection: ${collectionLabels[collectionName]}`);
+    }
+
+    showTableSuccessMessage(tableId, message) {
+        // Show a temporary success message above the table
+        const table = document.getElementById(tableId);
+        if (!table) return;
+
+        // Remove any existing success message
+        const existingMessage = table.parentNode.querySelector('.table-success-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+
+        // Create success message
+        const successMessage = document.createElement('div');
+        successMessage.className = 'table-success-message';
+        successMessage.style.cssText = `
+            background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 184, 148, 0.3);
+            animation: slideInDown 0.5s ease-out;
+        `;
+        successMessage.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+
+        // Insert before the table
+        table.parentNode.insertBefore(successMessage, table);
+
+        // Remove after 3 seconds
+        setTimeout(() => {
+            if (successMessage.parentNode) {
+                successMessage.style.animation = 'slideOutUp 0.5s ease-in';
+                setTimeout(() => successMessage.remove(), 500);
+            }
+        }, 3000);
     }
 
     escapeHtml(text) {
@@ -860,4 +937,4 @@ document.addEventListener('DOMContentLoaded', () => {
             app.checkAuthStatus();
         }, 2000);
     }
-}); 
+});

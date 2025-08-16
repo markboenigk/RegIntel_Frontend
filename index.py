@@ -153,6 +153,7 @@ templates = Jinja2Templates(directory="templates")
 # Include authentication routes
 from auth.routes import router as auth_router
 from auth.middleware import get_current_user, get_optional_user
+from auth.config import supabase_config
 app.include_router(auth_router)
 
 # Utility functions
@@ -1786,6 +1787,414 @@ async def get_validation_status():
             "injection_attempt_detection"
         ]
     }
+
+@app.get("/api/warning-letters/latest")
+async def get_latest_warning_letters(limit: int = 10):
+    """Get the most recent warning letters from Supabase warning_letter_analytics table."""
+    try:
+        print(f"🔍 DEBUG: Fetching latest {limit} warning letters from Supabase")
+        
+        # Get Supabase client
+        supabase = supabase_config.get_client()
+        
+        # First, let's check what tables are available
+        try:
+            # Query the warning_letter_analytics table for the most recent entries with DISTINCT
+            # Replicating: SELECT DISTINCT letter_date, company_name, summary FROM public.warning_letter_analytics ORDER BY letter_date DESC
+            print(f"🔍 DEBUG: About to query Supabase with limit={limit}")
+            # Use a higher limit to ensure we get enough records for DISTINCT processing
+            supabase_limit = max(limit * 10, 100)  # Get at least 10x the requested limit or 100 records
+            print(f"🔍 DEBUG: Using Supabase limit={supabase_limit} to ensure enough data for DISTINCT processing")
+            response = supabase.table('warning_letter_analytics').select('letter_date,company_name,summary').order('letter_date', desc=True).limit(supabase_limit).execute()
+            
+            print(f"🔍 DEBUG: Supabase response received")
+            if hasattr(response, 'data'):
+                warning_letters = response.data
+                print(f"🔍 DEBUG: Response has 'data' attribute, length: {len(warning_letters)}")
+            else:
+                # Handle different response format
+                warning_letters = response.get('data', [])
+                print(f"🔍 DEBUG: Response uses .get('data'), length: {len(warning_letters)}")
+            
+            print(f"🔍 DEBUG: Raw data from Supabase: {len(warning_letters)} records")
+            if warning_letters:
+                print(f"🔍 DEBUG: First record: {warning_letters[0]}")
+                print(f"🔍 DEBUG: Last record: {warning_letters[-1]}")
+            
+            # Apply DISTINCT logic to remove only exact duplicates (same company, date, and summary)
+            # TEMPORARILY DISABLED TO DEBUG - see all raw data
+            # seen_combinations = set()
+            # distinct_warning_letters = []
+            # 
+            # for letter in warning_letters:
+            #     # Create a unique key for the combination of the three fields
+            #     combination_key = (letter.get('letter_date'), letter.get('company_name'), letter.get('summary'))
+            #     
+            #     if combination_key not in seen_combinations:
+            #         seen_combinations.add(combination_key)
+            #         distinct_warning_letters.append(letter)
+            #     else:
+            #         print(f"🔍 DEBUG: Skipping duplicate: {letter.get('company_name')} - {letter.get('letter_date')}")
+            # 
+            # warning_letters = distinct_warning_letters
+            
+            # Apply DISTINCT logic to remove exact duplicates (same company, date, and summary)
+            seen_combinations = set()
+            distinct_warning_letters = []
+            
+            for letter in warning_letters:
+                # Create a unique key for the combination of the three fields
+                combination_key = (letter.get('letter_date'), letter.get('company_name'), letter.get('summary'))
+                
+                if combination_key not in seen_combinations:
+                    seen_combinations.add(combination_key)
+                    distinct_warning_letters.append(letter)
+                else:
+                    print(f"🔍 DEBUG: Skipping duplicate: {letter.get('company_name')} - {letter.get('letter_date')}")
+            
+            warning_letters = distinct_warning_letters
+            
+            print(f"🔍 DEBUG: Found {len(warning_letters)} distinct warning letters from Supabase (removed {len(warning_letters) - len(distinct_warning_letters)} duplicates)")
+            
+            # Apply the user's requested limit after DISTINCT processing
+            if len(warning_letters) > limit:
+                warning_letters = warning_letters[:limit]
+                print(f"🔍 DEBUG: Applied user limit: showing {len(warning_letters)} records out of {len(distinct_warning_letters)} distinct records")
+            
+            # TEMPORARILY DISABLE DISTINCT TO DEBUG
+            print(f"🔍 DEBUG: DISTINCT DISABLED - showing all {len(warning_letters)} records")
+            # warning_letters = distinct_warning_letters
+            
+        except Exception as table_error:
+            print(f"❌ DEBUG: Error with warning_letter_analytics table: {table_error}")
+            # Try alternative table names in public schema
+            alternative_tables = ['warning_letters', 'fda_warning_letters', 'warning_letter_analytics']
+            
+            for table_name in alternative_tables:
+                try:
+                    print(f"🔄 DEBUG: Trying alternative table: {table_name}")
+                    # Use a higher limit for alternative tables as well
+                    alt_supabase_limit = max(limit * 10, 100)
+                    response = supabase.table(table_name).select('letter_date,company_name,summary').limit(alt_supabase_limit).execute()
+                    
+                    if hasattr(response, 'data'):
+                        warning_letters = response.data
+                    else:
+                        warning_letters = response.get('data', [])
+                    
+                    if warning_letters:
+                        # Apply DISTINCT logic to alternative tables as well
+                        # TEMPORARILY DISABLED TO DEBUG - see all raw data
+                        # seen_combinations = set()
+                        # distinct_warning_letters = []
+                        # 
+                        # for letter in warning_letters:
+                        #     combination_key = (letter.get('letter_date'), letter.get('company_name'), letter.get('summary'))
+                        #     
+                        #     if combination_key not in seen_combinations:
+                        #         seen_combinations.add(combination_key)
+                        #         distinct_warning_letters.append(letter)
+                        #     else:
+                        #         print(f"🔍 DEBUG: Skipping duplicate in {table_name}: {letter.get('company_name')} - {letter.get('letter_date')}")
+                        # 
+                        # warning_letters = distinct_warning_letters
+                        # print(f"✅ DEBUG: Found {len(warning_letters)} raw records in {table_name} (DISTINCT disabled)")
+                        
+                        # Apply DISTINCT logic to alternative tables as well
+                        seen_combinations = set()
+                        distinct_warning_letters = []
+                        
+                        for letter in warning_letters:
+                            combination_key = (letter.get('letter_date'), letter.get('company_name'), letter.get('summary'))
+                            
+                            if combination_key not in seen_combinations:
+                                seen_combinations.add(combination_key)
+                                distinct_warning_letters.append(letter)
+                            else:
+                                print(f"🔍 DEBUG: Skipping duplicate in {table_name}: {letter.get('company_name')} - {letter.get('letter_date')}")
+                        
+                        warning_letters = distinct_warning_letters
+                        print(f"✅ DEBUG: Found {len(warning_letters)} distinct records in {table_name} (removed duplicates)")
+                        break
+                        
+                except Exception as alt_error:
+                    print(f"❌ DEBUG: Table {table_name} failed: {alt_error}")
+                    warning_letters = []
+                    continue
+            else:
+                # If no alternative tables work, return empty
+                warning_letters = []
+        
+        # Transform the data to match the expected format
+        transformed_letters = []
+        for letter in warning_letters:
+            # Only handle the three fields we need
+            company_name = letter.get('company_name', 'Unknown Company')
+            letter_date = letter.get('letter_date', 'Unknown Date')
+            summary = letter.get('summary', 'No Subject')
+            
+            transformed_letter = {
+                "company_name": company_name,
+                "letter_date": letter_date,
+                "subject": summary
+            }
+            transformed_letters.append(transformed_letter)
+        
+        return {
+            "success": True,
+            "count": len(transformed_letters),
+            "warning_letters": transformed_letters,
+            "source_table": "warning_letter_analytics" if transformed_letters else "none_found"
+        }
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error fetching warning letters from Supabase: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "warning_letters": [],
+            "source_table": "error"
+        }
+
+@app.get("/api/debug/supabase-tables")
+async def debug_supabase_tables():
+    """Debug endpoint to see what tables and columns are available in Supabase."""
+    try:
+        print(f"🔍 DEBUG: Checking available Supabase tables")
+        
+        # Get Supabase client
+        supabase = supabase_config.get_client()
+        
+        # Try to get table information
+        tables_info = {}
+        
+        # Test some common table names
+        test_tables = [
+            'warning_letter_analytics',
+            'warning_letters', 
+            'fda_warning_letters',
+            'users',
+            'profiles'
+        ]
+        
+        for table_name in test_tables:
+            try:
+                print(f"🔄 DEBUG: Testing table: {table_name}")
+                # Try to get a single record to see the structure
+                response = supabase.table(table_name).select('*').limit(1).execute()
+                
+                if hasattr(response, 'data'):
+                    data = response.data
+                else:
+                    data = response.get('data', [])
+                
+                if data and len(data) > 0:
+                    # Get column names from the first record
+                    columns = list(data[0].keys()) if data[0] else []
+                    tables_info[table_name] = {
+                        "exists": True,
+                        "record_count": len(data),
+                        "columns": columns,
+                        "sample_record": data[0] if data else None
+                    }
+                    print(f"✅ DEBUG: Table {table_name} exists with columns: {columns}")
+                else:
+                    tables_info[table_name] = {
+                        "exists": True,
+                        "record_count": 0,
+                        "columns": [],
+                        "sample_record": None
+                    }
+                    print(f"⚠️ DEBUG: Table {table_name} exists but is empty")
+                    
+            except Exception as table_error:
+                tables_info[table_name] = {
+                    "exists": False,
+                    "error": str(table_error)
+                }
+                print(f"❌ DEBUG: Table {table_name} failed: {table_error}")
+        
+        return {
+            "success": True,
+            "supabase_url": supabase_config.supabase_url,
+            "tables_info": tables_info,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error checking Supabase tables: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "tables_info": {}
+        }
+
+@app.get("/api/explore-supabase")
+async def explore_supabase():
+    """Explore what's actually available in Supabase."""
+    try:
+        print(f"🔍 DEBUG: Exploring Supabase database structure")
+        
+        # Get Supabase client
+        supabase = supabase_config.get_client()
+        
+        # Try to get information about available schemas and tables
+        exploration_results = {
+            "supabase_url": supabase_config.supabase_url,
+            "available_tables": [],
+            "schema_info": {},
+            "test_queries": {}
+        }
+        
+        # Test 1: Try to query without specifying schema
+        try:
+            print(f"🔄 DEBUG: Testing direct table access...")
+            response = supabase.table('warning_letter_analytics').select('*').limit(1).execute()
+            exploration_results["test_queries"]["direct_access"] = {
+                "success": True,
+                "data": response.data if hasattr(response, 'data') else response.get('data', [])
+            }
+            print(f"✅ DEBUG: Direct access succeeded!")
+        except Exception as e:
+            exploration_results["test_queries"]["direct_access"] = {
+                "success": False,
+                "error": str(e)
+            }
+            print(f"❌ DEBUG: Direct access failed: {e}")
+        
+        # Test 2: Try to query with raw SQL (if supported)
+        try:
+            print(f"🔄 DEBUG: Testing raw SQL query...")
+            # Try to get table list
+            response = supabase.rpc('get_table_list').execute()
+            exploration_results["test_queries"]["raw_sql"] = {
+                "success": True,
+                "data": response.data if hasattr(response, 'data') else response.get('data', [])
+            }
+            print(f"✅ DEBUG: Raw SQL succeeded!")
+        except Exception as e:
+            exploration_results["test_queries"]["raw_sql"] = {
+                "success": False,
+                "error": str(e)
+            }
+            print(f"❌ DEBUG: Raw SQL failed: {e}")
+        
+        # Test 3: Try to query the information_schema
+        try:
+            print(f"🔄 DEBUG: Testing information_schema query...")
+            response = supabase.table('information_schema.tables').select('table_schema,table_name').eq('table_schema', 'regintel').execute()
+            exploration_results["test_queries"]["information_schema"] = {
+                "success": True,
+                "data": response.data if hasattr(response, 'data') else response.get('data', [])
+            }
+            print(f"✅ DEBUG: Information schema query succeeded!")
+        except Exception as e:
+            exploration_results["test_queries"]["information_schema"] = {
+                "success": False,
+                "error": str(e)
+            }
+            print(f"❌ DEBUG: Information schema query failed: {e}")
+        
+        # Test 4: Try different table access patterns
+        table_patterns = [
+            'warning_letter_analytics',
+            'regintel_warning_letter_analytics', 
+            'regintel.warning_letter_analytics',
+            'public.regintel.warning_letter_analytics'
+        ]
+        
+        for pattern in table_patterns:
+            try:
+                print(f"🔄 DEBUG: Testing pattern: {pattern}")
+                response = supabase.table(pattern).select('*').limit(1).execute()
+                if hasattr(response, 'data') and response.data:
+                    exploration_results["available_tables"].append({
+                        "pattern": pattern,
+                        "success": True,
+                        "record_count": len(response.data)
+                    })
+                    print(f"✅ DEBUG: Pattern '{pattern}' succeeded with {len(response.data)} records!")
+                    break
+                else:
+                    exploration_results["available_tables"].append({
+                        "pattern": pattern,
+                        "success": True,
+                        "record_count": 0
+                    })
+                    print(f"⚠️ DEBUG: Pattern '{pattern}' succeeded but no records found")
+            except Exception as e:
+                exploration_results["available_tables"].append({
+                    "pattern": pattern,
+                    "success": False,
+                    "error": str(e)
+                })
+                print(f"❌ DEBUG: Pattern '{pattern}' failed: {e}")
+        
+        return {
+            "success": True,
+            "exploration_results": exploration_results,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error exploring Supabase: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "exploration_results": {}
+        }
+
+@app.get("/api/explore-warning-letters")
+async def explore_warning_letters():
+    """Explore what companies and dates are available in the warning_letter_analytics table."""
+    try:
+        print(f"🔍 DEBUG: Exploring warning letters data structure")
+        
+        # Get Supabase client
+        supabase = supabase_config.get_client()
+        
+        # Get a sample of records to see what's available
+        response = supabase.table('warning_letter_analytics').select('letter_date,company_name,summary').order('letter_date', desc=True).limit(50).execute()
+        
+        if hasattr(response, 'data'):
+            warning_letters = response.data
+        else:
+            warning_letters = response.get('data', [])
+        
+        # Analyze the data
+        companies = set()
+        dates = set()
+        unique_combinations = set()
+        
+        for letter in warning_letters:
+            companies.add(letter.get('company_name', 'Unknown'))
+            dates.add(letter.get('letter_date', 'Unknown'))
+            combination = (letter.get('letter_date'), letter.get('company_name'), letter.get('summary'))
+            unique_combinations.add(combination)
+        
+        return {
+            "success": True,
+            "total_records": len(warning_letters),
+            "unique_combinations": len(unique_combinations),
+            "companies": list(companies),
+            "dates": sorted(list(dates), reverse=True),
+            "sample_data": warning_letters[:5]  # First 5 records
+        }
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error exploring warning letters: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     import uvicorn

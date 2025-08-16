@@ -770,6 +770,103 @@ input[type="number"] {
     border: 1px solid #bee5eb;
 }
 
+/* Warning Letters specific styling */
+.info-table-section:has(h3:contains("Warning Letters")) {
+    border-left: 4px solid #ff6b6b;
+}
+
+.info-table-section h3:contains("Warning Letters") {
+    color: #d63031;
+}
+
+.info-table-section h3:contains("Warning Letters") i {
+    color: #ff6b6b;
+    animation: pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+/* Enhanced status badges for warning letters */
+.status-badge.warning {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+    transition: all 0.3s ease;
+}
+
+.status-badge.warning:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(255, 107, 107, 0.4);
+}
+
+/* Company name styling */
+.info-table td:nth-child(2) {
+    font-weight: 600;
+    color: #2d3436;
+}
+
+/* Subject column styling */
+.info-table td:nth-child(3) {
+    color: #636e72;
+    line-height: 1.4;
+}
+
+/* Date column styling */
+.info-table td:nth-child(1) {
+    color: #74b9ff;
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+/* Loading state for warning letters */
+.loading-message:contains("Supabase") {
+    color: #0984e3;
+    font-weight: 500;
+}
+
+.loading-message:contains("Supabase")::before {
+    content: "🔄 ";
+    margin-right: 8px;
+}
+
+/* Table success message animations */
+@keyframes slideInDown {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutUp {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    to {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+}
+
 /* Responsive design for tables */
 @media (max-width: 1024px) {
     .info-tables-container {
