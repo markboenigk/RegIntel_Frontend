@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatGPT RAG Chat</title>
+    <title>RegIntelligence Platform</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
     <link
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
@@ -13,31 +13,23 @@
 
 <body>
     <div class="container">
-        <header class="header">
-            <div class="header-content">
-                <div class="header-left">
-                    <h1><i class="fas fa-robot"></i> ChatGPT RAG Chat</h1>
-                    <p>Powered by OpenAI GPT and Milvus Vector Database</p>
-                    <div class="collection-indicator" id="collectionIndicator"> 📰 RSS
-                        Feeds Collection </div>
+        <!-- Top Bar with Authentication -->
+        <div class="top-bar">
+            <div class="top-bar-content">
+                <div class="top-bar-left">
+                    <!-- Empty for now, could add logo later -->
                 </div>
-                <div class="header-right">
+                <div class="top-bar-right">
                     <!-- Authentication UI --> {% if user %} <div id="authSection"
                         class="auth-section">
                         <div class="user-menu">
                             <span id="userName" class="user-name">{{ user.full_name or
                                 user.email }}</span>
-                            <div class="user-dropdown">
-                                <button id="userMenuButton" class="user-menu-button">
-                                    <i class="fas fa-user-circle"></i>
-                                    <i class="fas fa-chevron-down"></i>
-                                </button>
-                                <div id="userDropdownMenu" class="user-dropdown-menu">
-                                    <a href="/auth/profile-page" class="dropdown-item">
-                                        <i class="fas fa-user"></i> Profile </a>
-                                    <a href="#" id="logoutButton" class="dropdown-item">
-                                        <i class="fas fa-sign-out-alt"></i> Logout </a>
-                                </div>
+                            <div class="auth-buttons">
+                                <a href="/auth/profile-page" class="profile-button">
+                                    <i class="fas fa-user"></i> Profile </a>
+                                <a href="#" id="logoutButton" class="logout-button">
+                                    <i class="fas fa-sign-out-alt"></i> Logout </a>
                             </div>
                         </div>
                     </div>
@@ -50,17 +42,11 @@
                         style="display: none;">
                         <div class="user-menu">
                             <span id="userName" class="user-name">User</span>
-                            <div class="user-dropdown">
-                                <button id="userMenuButton" class="user-menu-button">
-                                    <i class="fas fa-user-circle"></i>
-                                    <i class="fas fa-chevron-down"></i>
-                                </button>
-                                <div id="userDropdownMenu" class="user-dropdown-menu">
-                                    <a href="/auth/profile-page" class="dropdown-item">
-                                        <i class="fas fa-user"></i> Profile </a>
-                                    <a href="#" class="dropdown-item">
-                                        <i class="fas fa-sign-out-alt"></i> Logout </a>
-                                </div>
+                            <div class="auth-buttons">
+                                <a href="/auth/profile-page" class="profile-button">
+                                    <i class="fas fa-user"></i> Profile </a>
+                                <a href="#" class="dropdown-item">
+                                    <i class="fas fa-sign-out-alt"></i> Logout </a>
                             </div>
                         </div>
                     </div>
@@ -72,122 +58,155 @@
                     </div> {% endif %}
                 </div>
             </div>
-        </header>
-        <main class="main-content">
-            <div class="chat-container">
-                <div class="chat-messages" id="chatMessages">
-                    <div class="message system-message">
-                        <div class="message-content">
-                            <i class="fas fa-info-circle"></i> Welcome! I'm your AI
-                            assistant powered by ChatGPT and enhanced with RAG
-                            (Retrieval-Augmented Generation). I can help you with
-                            questions and provide context-aware responses using the
-                            knowledge base.
-                        </div>
-                    </div>
-                    <div class="message auth-info-message" id="authInfoMessage">
-                        <div class="message-content">
-                            <i class="fas fa-user-circle"></i> <strong>Chat
-                                freely!</strong> No login required to use the chatbot.
-                            <a href="/auth/login" class="auth-link">Login</a> to save
-                            your chat history and access personal features.
-                        </div>
-                    </div>
-                </div>
-                <div class="chat-input-container">
-                    <div class="input-wrapper">
-                        <textarea id="messageInput"
-                            placeholder="Type your message here..." rows="1"
-                            maxlength="1000"></textarea>
-                        <button id="sendButton" class="send-button">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                    </div>
-                    <div class="input-actions">
-                        <button id="clearButton" class="action-button">
-                            <i class="fas fa-trash"></i> Clear Chat </button>
-                        <button id="addDocumentButton" class="action-button">
-                            <i class="fas fa-plus"></i> Add Document </button>
-                        <button id="testConfigButton" class="action-button">
-                            <i class="fas fa-cog"></i> Test Config </button>
-                    </div>
-                </div>
-            </div>
-            <div class="sidebar">
-                <div class="sidebar-section">
-                    <h3><i class="fas fa-cog"></i> Settings</h3>
-                    <div class="setting-item">
-                        <label for="openaiKey">OpenAI API Key:</label>
-                        <input type="password" id="openaiKey"
-                            placeholder="Enter your OpenAI API key">
-                        <button id="saveKeyButton" class="small-button">Save</button>
-                    </div>
-                    <div class="setting-item">
-                        <label for="collectionSelect">Active Collection:</label>
-                        <select id="collectionSelect" class="collection-selector">
-                            <option value="rss_feeds">📰 RSS Feeds (Regulatory
-                                Intelligence)</option>
-                            <option value="fda_warning_letters">⚠️ FDA Warning Letters
-                            </option>
-                        </select>
-                    </div>
-                </div>
-                <div class="sidebar-section">
-                    <h3><i class="fas fa-database"></i> RAG Sources</h3>
-                    <div id="sourcesList" class="sources-list">
-                        <p class="no-sources">No sources found for current query</p>
-                    </div>
-                </div>
-                <div class="sidebar-section">
-                    <h3><i class="fas fa-chart-line"></i> Status</h3>
-                    <div class="status-item">
-                        <span class="status-label">API Status:</span>
-                        <span id="apiStatus" class="status-value">Checking...</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Milvus:</span>
-                        <span id="milvusStatus" class="status-value">Checking...</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">OpenAI Key:</span>
-                        <span id="openaiKeyStatus"
-                            class="status-value">Checking...</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">RAG Config:</span>
-                        <span id="ragConfigStatus"
-                            class="status-value">Checking...</span>
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-    <!-- Add Document Modal -->
-    <div id="documentModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-file-alt"></i> Add Document to RAG</h3>
-                <span class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="documentText">Document Text:</label>
-                    <textarea id="documentText" rows="8"
-                        placeholder="Enter the document content here..."></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="documentMetadata">Metadata (optional):</label>
-                    <input type="text" id="documentMetadata"
-                        placeholder="e.g., source, author, date">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="cancelDocumentButton"
-                    class="button secondary">Cancel</button>
-                <button id="submitDocumentButton" class="button primary">
-                    <i class="fas fa-save"></i> Add Document </button>
+        </div>
+        <!-- Slim Banner with Website Name -->
+        <div class="banner">
+            <div class="banner-content">
+                <h1 class="banner-title">
+                    <i class="fas fa-robot"></i> RegIntelligence Platform
+                </h1>
+                <p class="banner-subtitle">Powered by OpenAI GPT and Milvus Vector
+                    Database</p>
             </div>
         </div>
+        <main class="main-content">
+            <div class="chat-container">
+                <div class="chat-header">
+                    <div class="header-main">
+                        <div class="header-title-row">
+                            <h2><i class="fas fa-comments"></i> AI Chat Assistant</h2>
+                            <div class="status-indicators">
+                                <span class="status-dot" id="apiStatusDot"
+                                    title="API Status"></span>
+                                <span class="status-dot" id="milvusStatusDot"
+                                    title="Milvus Status"></span>
+                            </div>
+                        </div>
+                        <p>Ask questions about regulatory intelligence, FDA warnings, or
+                            any other topics</p>
+                    </div>
+                    <div class="collection-selector-header">
+                        <div class="collection-buttons">
+                            <button id="collectionRssFeeds"
+                                class="collection-button active"
+                                data-collection="rss_feeds"> 📰 Regulatory News
+                            </button>
+                            <button id="collectionFdaWarningLetters"
+                                class="collection-button"
+                                data-collection="fda_warning_letters"> ⚠️ FDA Warning
+                                Letters </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-messages-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message system-message">
+                            <div class="message-content">
+                                <i class="fas fa-info-circle"></i> Welcome! I'm RegIna,
+                                your AI powered regulatory intelligence assistant. I can
+                                help you with questions FDA Warning Letters and the
+                                recent regulatory news.
+                            </div>
+                        </div>
+                        <div class="message auth-info-message" id="authInfoMessage">
+                            <div class="message-content">
+                                <i class="fas fa-user-circle"></i> <strong>Chat
+                                    freely!</strong> No login required to use the
+                                chatbot. <a href="/auth/login"
+                                    class="auth-link">Login</a> to save your chat
+                                history and access personal features.
+                            </div>
+                        </div>
+                        <!-- Typing indicator -->
+                        <div id="typingIndicator" class="typing-indicator"
+                            style="display: none;">
+                            <div class="typing-content">
+                                <i class="fas fa-robot"></i> AI is thinking...
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-container">
+                        <div class="input-wrapper">
+                            <textarea id="messageInput"
+                                placeholder="Type your message here..." rows="1"
+                                maxlength="1000"></textarea>
+                            <button id="sendButton" class="send-button">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="input-actions">
+                            <button id="clearButton" class="action-button">
+                                <i class="fas fa-trash"></i> Clear Chat </button>
+                        </div>
+                        <!-- Sources Section -->
+                        <div class="sources-section-chat">
+                            <div class="sources-header" id="sourcesHeader">
+                                <h4><i class="fas fa-database"></i> Sources <span
+                                        id="sourcesCount"
+                                        class="sources-count">(0)</span></h4>
+                                <button class="sources-toggle" id="sourcesToggle">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                            </div>
+                            <div class="sources-content" id="sourcesContent"
+                                style="display: none;">
+                                <div id="sourcesList" class="sources-list">
+                                    <p class="no-sources">No sources found for current
+                                        query</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+    </div>
+    </main>
+    <!-- Latest Information Tables -->
+    <div class="info-tables-container">
+        <div class="info-table-section">
+            <h3><i class="fas fa-exclamation-triangle"></i> Latest FDA Warning Letters
+            </h3>
+            <div class="table-container">
+                <table class="info-table" id="fdaWarningLettersTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Company</th>
+                            <th>Subject</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fdaWarningLettersBody">
+                        <tr>
+                            <td colspan="4" class="loading-message">Loading latest
+                                warning letters...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="info-table-section">
+            <h3><i class="fas fa-newspaper"></i> Most Recent News</h3>
+            <div class="table-container">
+                <table class="info-table" id="recentNewsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Source</th>
+                            <th>Headline</th>
+                            <th>Category</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentNewsBody">
+                        <tr>
+                            <td colspan="4" class="loading-message">Loading latest
+                                news...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
     </div>
     <script src="{{ url_for('static', path='/js/chat.js') }}"></script>
 </body>

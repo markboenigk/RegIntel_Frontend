@@ -5,7 +5,7 @@ import requests
 import numpy as np
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request, Depends, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -983,6 +983,34 @@ async def index(request: Request, current_user = Depends(get_optional_user)):
     }
     return templates.TemplateResponse("index.html", context)
 
+@app.get("/api/search")
+async def search_documents(query: str, collection: str = None, limit: int = 10):
+    """Search endpoint for documents without going through chat - for frontend sample data loading."""
+    try:
+        # Use specified collection or default
+        target_collection = collection or DEFAULT_COLLECTION
+        
+        print(f"🔍 SEARCH API: Query='{query}', Collection='{target_collection}', Limit={limit}")
+        
+        # Search for relevant documents
+        sources = await search_similar_documents(query, limit, target_collection)
+        
+        print(f"🔍 SEARCH API: Found {len(sources)} sources")
+        
+        return {
+            "query": query,
+            "collection": target_collection,
+            "limit": limit,
+            "sources": sources,
+            "sources_count": len(sources)
+        }
+        
+    except Exception as e:
+        print(f"❌ SEARCH API ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, client_request: Request, current_user = Depends(get_optional_user)):
     """Chat endpoint with RAG integration - SIMPLIFIED VERSION."""
@@ -1520,7 +1548,7 @@ async def health_check():
         return {"status": "unhealthy", "zilliz_connected": False, "error": str(e)}
 
 @app.get("/api/auth/status")
-async def auth_status(current_user = Depends(get_optional_user)):
+async def auth_status(current_user = Depends(get_optional_user), request: Request = None):
     """Get authentication status without requiring authentication."""
     if current_user:
         return {
@@ -1532,7 +1560,36 @@ async def auth_status(current_user = Depends(get_optional_user)):
             }
         }
     else:
-        return {"authenticated": False}
+        # Debug: Return cookie information
+        cookies = dict(request.cookies) if request else {}
+        return {
+            "authenticated": False,
+            "debug": {
+                "cookies_received": cookies,
+                "cookie_count": len(cookies),
+                "has_auth_token": "auth_token" in cookies
+            }
+        }
+
+@app.get("/api/test-cookie")
+async def test_cookie_set(response: Response):
+    """Test endpoint to see if cookies can be set at all"""
+    response.set_cookie(
+        key="test_cookie",
+        value="test_value",
+        httponly=True,
+        secure=False,
+        samesite=None,
+        max_age=3600,
+        path="/",
+        domain=None
+    )
+    
+    return {
+        "message": "Test cookie set",
+        "headers": dict(response.headers),
+        "set_cookie": response.headers.get('set-cookie', 'Not found')
+    }
 
 @app.get("/api/user/chat-history")
 async def get_user_chat_history(current_user = Depends(get_current_user)):
@@ -1592,6 +1649,36 @@ async def test_search_get(query: str = "stryker", limit: int = 5, current_user =
         
     except Exception as e:
         print(f"❌ TEST SEARCH GET ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
+@app.get("/api/search")
+async def search_documents(query: str, collection: str, limit: int = 5, current_user = Depends(get_current_user)):
+    """Search for documents in a specific collection."""
+    try:
+        print(f"🔍 SEARCH: Query='{query}', Collection='{collection}', Limit={limit}")
+        
+        # Validate collection name
+        valid_collections = [FDA_WARNING_LETTERS_COLLECTION, RSS_FEEDS_COLLECTION]
+        if collection not in valid_collections:
+            raise HTTPException(status_code=400, detail=f"Invalid collection. Must be one of: {valid_collections}")
+        
+        # Use the existing search function
+        sources = await search_similar_documents(query, limit, collection)
+        
+        print(f"🔍 SEARCH: Found {len(sources)} sources")
+        
+        return {
+            "query": query,
+            "collection": collection,
+            "limit": limit,
+            "sources_found": len(sources),
+            "sources": sources
+        }
+        
+    except Exception as e:
+        print(f"❌ SEARCH ERROR: {e}")
         import traceback
         traceback.print_exc()
         return {"error": str(e)}

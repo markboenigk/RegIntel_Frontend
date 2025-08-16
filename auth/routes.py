@@ -46,11 +46,12 @@ async def signup(request: UserSignUp, response: Response):
             response.set_cookie(
                 key="auth_token",
                 value=auth_response.session.access_token,
-                httponly=True,
+                httponly=True,  # Back to secure HttpOnly
                 secure=False,  # Set to False for local development
-                samesite="lax",  # More permissive for local testing
+                samesite=None,  # Remove SameSite restriction for localhost
                 max_age=3600,
-                path="/"
+                path="/",
+                domain=None  # Explicitly set to None for localhost
             )
             
             response.set_cookie(
@@ -60,7 +61,8 @@ async def signup(request: UserSignUp, response: Response):
                 secure=False,  # Set to False for local development
                 samesite="lax",  # More permissive for local testing
                 max_age=7*24*3600,  # 7 days
-                path="/"
+                path="/",
+                domain=None  # Explicitly set to None for localhost
             )
             
             return {
@@ -83,24 +85,35 @@ async def signup(request: UserSignUp, response: Response):
 async def signin(request: UserSignIn, response: Response):
     """User sign in endpoint"""
     try:
+        print(f"🔐 Signin attempt for email: {request.email}")
         supabase = supabase_config.get_client()
         
         # Sign in with Supabase
+        print(f"🔐 Calling Supabase auth.sign_in_with_password...")
         auth_response = supabase.auth.sign_in_with_password({
             "email": request.email,
             "password": request.password
         })
         
+        print(f"🔐 Supabase response received")
+        print(f"🔐 User object: {auth_response.user}")
+        print(f"🔐 Session object: {auth_response.session}")
+        print(f"🔐 Auth response type: {type(auth_response)}")
+        
         if auth_response.user and auth_response.session:
+            print(f"🔐 Setting cookies for user: {auth_response.user.email}")
+            print(f"🔐 Access token length: {len(auth_response.session.access_token)}")
+            
             # Set cookies for automatic authentication
             response.set_cookie(
                 key="auth_token",
                 value=auth_response.session.access_token,
-                httponly=True,
+                httponly=True,  # Back to secure HttpOnly
                 secure=False,  # Set to False for local development
-                samesite="lax",  # More permissive for local testing
+                samesite=None,  # Remove SameSite restriction for localhost
                 max_age=3600,
-                path="/"
+                path="/",
+                domain=None  # Explicitly set to None for localhost
             )
             
             response.set_cookie(
@@ -108,10 +121,26 @@ async def signin(request: UserSignIn, response: Response):
                 value=auth_response.session.refresh_token,
                 httponly=True,
                 secure=False,  # Set to False for local development
-                samesite="lax",  # More permissive for local testing
+                samesite=None,  # Remove SameSite restriction for localhost
                 max_age=7*24*3600,  # 7 days
-                path="/auth/refresh"
+                path="/",  # Set to root path so middleware can find it
+                domain=None  # Explicitly set to None for localhost
             )
+            
+            print(f"✅ Cookies set successfully")
+            print(f"🔍 Response headers: {dict(response.headers)}")
+            print(f"🔍 Set-Cookie header: {response.headers.get('set-cookie', 'Not found')}")
+            
+            # Test: Try to get the cookie back from the response
+            test_cookie = response.headers.get('set-cookie')
+            if test_cookie:
+                print(f"🔍 Cookie parsing test:")
+                print(f"   Raw cookie: {test_cookie}")
+                print(f"   Contains 'auth_token': {'auth_token' in test_cookie}")
+                print(f"   Contains 'HttpOnly': {'HttpOnly' in test_cookie}")
+                print(f"   Contains 'Path=/': {'Path=/' in test_cookie}")
+            else:
+                print(f"❌ No Set-Cookie header found!")
             
             return {
                 "message": "Sign in successful",
@@ -122,6 +151,9 @@ async def signin(request: UserSignIn, response: Response):
                 }
             }
         else:
+            print(f"❌ Sign in failed - user or session missing")
+            print(f"❌ User exists: {bool(auth_response.user)}")
+            print(f"❌ Session exists: {bool(auth_response.session)}")
             raise HTTPException(status_code=400, detail="Sign in failed")
             
     except Exception as e:
@@ -180,10 +212,14 @@ async def get_profile(current_user: UserProfile = Depends(get_current_user)):
 @router.put("/profile", response_model=UserProfile)
 async def update_profile(
     updates: UserUpdate, 
-    current_user: UserProfile = Depends(get_current_user)
+    current_user: UserProfile = Depends(get_current_user),
+    request: Request = None
 ):
     """Update user profile"""
     try:
+        print(f"🔐 Profile update attempt for user: {current_user.email}")
+        print(f"🔐 Request cookies: {dict(request.cookies) if request else 'No request object'}")
+        
         supabase = supabase_config.get_client()
         
         # Update user metadata
@@ -200,13 +236,33 @@ async def update_profile(
             })
             
             if user_response.user:
+                # Convert datetime objects to ISO format strings
+                created_at = user_response.user.created_at
+                last_sign_in = user_response.user.last_sign_in_at
+                
+                if isinstance(created_at, (int, float)) and created_at > 0:
+                    from datetime import datetime
+                    created_at = datetime.fromtimestamp(created_at).isoformat()
+                elif hasattr(created_at, 'isoformat'):
+                    created_at = created_at.isoformat()
+                else:
+                    created_at = "1970-01-01T00:00:00"
+                    
+                if isinstance(last_sign_in, (int, float)) and last_sign_in > 0:
+                    from datetime import datetime
+                    last_sign_in = datetime.fromtimestamp(last_sign_in).isoformat()
+                elif hasattr(last_sign_in, 'isoformat'):
+                    last_sign_in = last_sign_in.isoformat()
+                else:
+                    last_sign_in = "1970-01-01T00:00:00"
+                
                 # Return updated profile
                 return UserProfile(
                     id=user_response.user.id,
                     email=user_response.user.email,
                     full_name=user_response.user.user_metadata.get("full_name", "Unknown"),
-                    created_at=user_response.user.created_at,
-                    last_sign_in=user_response.user.last_sign_in_at
+                    created_at=created_at,
+                    last_sign_in=last_sign_in
                 )
         
         return current_user

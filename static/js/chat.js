@@ -3,15 +3,20 @@ class ChatApp {
     constructor() {
         this.conversationHistory = [];
         this.isLoading = false;
+        this.lastSources = [];
         this.init();
     }
 
     init() {
         this.bindEvents();
-        this.loadSettings();
+        this.setInitialStatus();
         this.checkHealth();
         this.autoResizeTextarea();
         this.checkAuthStatus();
+        this.loadLatestInfo();
+
+        // Ensure initial collection state is set
+        this.setInitialCollectionState();
     }
 
     bindEvents() {
@@ -19,57 +24,83 @@ class ChatApp {
         const sendButton = document.getElementById('sendButton');
         const messageInput = document.getElementById('messageInput');
 
-        sendButton.addEventListener('click', () => this.sendMessage());
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                this.sendMessage();
-            }
-        });
+        if (sendButton && messageInput) {
+            sendButton.addEventListener('click', () => this.sendMessage());
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            });
+        }
 
         // Clear chat
-        document.getElementById('clearButton').addEventListener('click', () => this.clearChat());
+        const clearButton = document.getElementById('clearButton');
+        if (clearButton) {
+            clearButton.addEventListener('click', () => this.clearChat());
+        }
 
-        // Add document modal
-        document.getElementById('addDocumentButton').addEventListener('click', () => this.showDocumentModal());
-        document.getElementById('cancelDocumentButton').addEventListener('click', () => this.hideDocumentModal());
-        document.getElementById('submitDocumentButton').addEventListener('click', () => this.addDocument());
-        document.querySelector('.close').addEventListener('click', () => this.hideDocumentModal());
 
-        // Save API key
-        document.getElementById('saveKeyButton').addEventListener('click', () => this.saveApiKey());
 
-        // Collection selector
-        document.getElementById('collectionSelect').addEventListener('change', (e) => this.switchCollection(e.target.value));
 
-        // Test configuration
-        document.getElementById('testConfigButton').addEventListener('click', () => this.testConfiguration());
+
+
+
+
+        // Collection selector (header buttons)
+        const collectionRssFeeds = document.getElementById('collectionRssFeeds');
+        const collectionFdaWarningLetters = document.getElementById('collectionFdaWarningLetters');
+
+        if (collectionRssFeeds) {
+            collectionRssFeeds.addEventListener('click', () => this.switchCollection('rss_feeds'));
+        }
+        if (collectionFdaWarningLetters) {
+            collectionFdaWarningLetters.addEventListener('click', () => this.switchCollection('fda_warning_letters'));
+        }
+
+
+
+        // Sources expand/collapse functionality
+        const sourcesHeader = document.getElementById('sourcesHeader');
+        const sourcesToggle = document.getElementById('sourcesToggle');
+        const sourcesContent = document.getElementById('sourcesContent');
+
+        if (sourcesHeader && sourcesToggle && sourcesContent) {
+            sourcesHeader.addEventListener('click', () => {
+                const isExpanded = sourcesContent.style.display !== 'none';
+                sourcesContent.style.display = isExpanded ? 'none' : 'block';
+                sourcesToggle.classList.toggle('expanded', !isExpanded);
+            });
+        }
 
         // Authentication events
-        document.getElementById('logoutButton').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.logout();
-        });
+        const logoutButton = document.getElementById('logoutButton');
+        if (logoutButton) {
+            logoutButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.logout();
+            });
+        }
 
-        // Modal close on outside click
-        window.addEventListener('click', (e) => {
-            const modal = document.getElementById('documentModal');
-            if (e.target === modal) {
-                this.hideDocumentModal();
-            }
-        });
+        // User dropdown menu - removed, replaced with simple buttons
+
+
     }
 
     autoResizeTextarea() {
         const textarea = document.getElementById('messageInput');
-        textarea.addEventListener('input', function () {
-            this.style.height = 'auto';
-            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-        });
+        if (textarea) {
+            textarea.addEventListener('input', function () {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            });
+        }
     }
 
     async sendMessage() {
         const messageInput = document.getElementById('messageInput');
+        if (!messageInput) return;
+
         const message = messageInput.value.trim();
 
         if (!message || this.isLoading) return;
@@ -83,8 +114,15 @@ class ChatApp {
         this.showTypingIndicator();
 
         try {
-            // Get the currently selected collection
-            const selectedCollection = document.getElementById('collectionSelect').value;
+            // Get the currently selected collection from the active button
+            const activeButton = document.querySelector('.collection-button.active');
+            if (!activeButton) {
+                console.error('❌ No active collection button found');
+                return;
+            }
+
+            const selectedCollection = activeButton.getAttribute('data-collection');
+            console.log('🔍 Selected collection:', selectedCollection);
 
             const response = await fetch(`/api/chat/${selectedCollection}`, {
                 method: 'POST',
@@ -121,6 +159,8 @@ class ChatApp {
 
     addMessageToChat(role, content) {
         const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${role}`;
 
@@ -152,6 +192,23 @@ class ChatApp {
 
     showTypingIndicator() {
         const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        // Get the current collection to show appropriate message
+        const activeButton = document.querySelector('.collection-button.active');
+        const collectionName = activeButton ? activeButton.getAttribute('data-collection') : 'rss_feeds';
+
+        let message = 'Searching for relevant sources...';
+        let icon = 'fas fa-brain';
+
+        if (collectionName === 'fda_warning_letters') {
+            message = 'Searching FDA warning letters...';
+            icon = 'fas fa-exclamation-triangle';
+        } else if (collectionName === 'rss_feeds') {
+            message = 'Searching regulatory news...';
+            icon = 'fas fa-newspaper';
+        }
+
         const typingDiv = document.createElement('div');
         typingDiv.className = 'message assistant';
         typingDiv.id = 'typingIndicator';
@@ -159,9 +216,13 @@ class ChatApp {
         const typingContent = document.createElement('div');
         typingContent.className = 'typing-indicator';
         typingContent.innerHTML = `
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
+            <i class="${icon}"></i>
+            <span>${message}</span>
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
         `;
 
         typingDiv.appendChild(typingContent);
@@ -176,33 +237,216 @@ class ChatApp {
             typingIndicator.remove();
         }
         this.isLoading = false;
+
+
     }
 
     updateSources(sources) {
         const sourcesList = document.getElementById('sourcesList');
+        const sourcesCount = document.getElementById('sourcesCount');
+        if (!sourcesList) return;
+
+        // Limit sources to maximum 5
+        const limitedSources = sources ? sources.slice(0, 5) : [];
+        const totalSources = sources ? sources.length : 0;
+
+        // Update the count indicator
+        if (sourcesCount) {
+            if (totalSources === 0) {
+                sourcesCount.textContent = '(0)';
+                sourcesCount.className = 'sources-count no-sources';
+            } else {
+                sourcesCount.textContent = `(${totalSources})`;
+                sourcesCount.className = 'sources-count has-sources';
+            }
+        }
 
         if (!sources || sources.length === 0) {
             sourcesList.innerHTML = '<p class="no-sources">No sources found for current query</p>';
+
+            // Collapse sources section when there are no sources
+            const sourcesContent = document.getElementById('sourcesContent');
+            const sourcesToggle = document.getElementById('sourcesToggle');
+            if (sourcesContent && sourcesToggle) {
+                sourcesContent.style.display = 'none';
+                sourcesToggle.classList.remove('expanded');
+            }
             return;
         }
 
         sourcesList.innerHTML = '';
-        sources.forEach((source, index) => {
+        limitedSources.forEach((source, index) => {
             const sourceDiv = document.createElement('div');
             sourceDiv.className = 'source-item';
 
-            // SIMPLIFIED: No reranking scores to display
-            const scoreText = ''; // source.score ? `Relevance: ${(source.score * 100).toFixed(1)}%` : '';
+            // Display confidence score if available
+            const confidenceScore = source.score || source.confidence || this.calculateConfidenceScore(source, index, totalSources);
+            const scoreText = confidenceScore ? `Confidence: ${(confidenceScore * 100).toFixed(1)}%` : '';
+
+            // Create a more informative source display
+            const metadata = source.metadata || {};
+            let sourceTitle = '';
+            let sourceDate = '';
+            let sourceCompany = '';
+
+            if (metadata.company_name && metadata.company_name !== 'Unknown Company') {
+                sourceCompany = metadata.company_name;
+            }
+            if (metadata.letter_date && metadata.letter_date !== 'Unknown Date') {
+                sourceDate = metadata.letter_date;
+            }
+            if (metadata.article_title && metadata.article_title !== 'Unknown Title') {
+                sourceTitle = metadata.article_title;
+            }
+
+            // Show the most relevant metadata first
+            let metadataDisplay = '';
+            if (sourceCompany) {
+                metadataDisplay += `<strong>Company:</strong> ${this.escapeHtml(sourceCompany)}`;
+            }
+            if (sourceDate) {
+                metadataDisplay += metadataDisplay ? ` | <strong>Date:</strong> ${this.escapeHtml(sourceDate)}` : `<strong>Date:</strong> ${this.escapeHtml(sourceDate)}`;
+            }
+            if (sourceTitle) {
+                metadataDisplay += metadataDisplay ? ` | <strong>Title:</strong> ${this.escapeHtml(sourceTitle)}` : `<strong>Title:</strong> ${this.escapeHtml(sourceTitle)}`;
+            }
 
             sourceDiv.innerHTML = `
-                <h4>Source ${index + 1}</h4>
-                <p>${this.escapeHtml(source.text.substring(0, 200))}${source.text.length > 200 ? '...' : ''}</p>
-                ${scoreText ? `<p class="score">${scoreText}</p>` : ''}
-                ${source.metadata ? `<p><small>${this.escapeHtml(source.metadata)}</small></p>` : ''}
+                <h4>Source ${index + 1} ${scoreText ? `<span class="confidence-badge">${scoreText}</span>` : ''}</h4>
+                ${metadataDisplay ? `<p class="source-metadata">${metadataDisplay}</p>` : ''}
+                <p class="source-text">${this.escapeHtml(source.text.substring(0, 200))}${source.text.length > 200 ? '...' : ''}</p>
             `;
             sourcesList.appendChild(sourceDiv);
         });
+
+        // Show a message if sources were limited
+        if (totalSources > 5) {
+            const limitMessage = document.createElement('div');
+            limitMessage.className = 'sources-limit-message';
+            limitMessage.innerHTML = `<p><small><i class="fas fa-info-circle"></i> Showing top 5 sources out of ${totalSources} found</small></p>`;
+            sourcesList.appendChild(limitMessage);
+        }
+
+        // Add confidence score explanation
+        const confidenceInfo = document.createElement('div');
+        confidenceInfo.className = 'confidence-info';
+        confidenceInfo.innerHTML = `<p><small><i class="fas fa-info-circle"></i> Confidence scores indicate relevance to your query. Higher scores suggest better semantic matches.</small></p>`;
+        sourcesList.appendChild(confidenceInfo);
+
+        // Auto-expand sources section when there are sources
+        if (totalSources > 0) {
+            const sourcesContent = document.getElementById('sourcesContent');
+            const sourcesToggle = document.getElementById('sourcesToggle');
+            if (sourcesContent && sourcesToggle) {
+                sourcesContent.style.display = 'block';
+                sourcesToggle.classList.add('expanded');
+            }
+        }
+
+        // Store the last sources for blinking restoration
+        this.lastSources = sources;
     }
+
+    calculateConfidenceScore(source, index, totalSources) {
+        // Calculate a confidence score based on actual relevance and quality
+        // This is a fallback when the backend doesn't provide scores
+
+        if (totalSources === 0) return 0;
+
+        let score = 0.0;
+
+        // Get the current query and clean it
+        const query = this.getCurrentQuery();
+        if (!query || !source.text) {
+            // Fallback to position-based scoring if no query or text
+            return Math.max(0.8 - (index * 0.08), 0.4);
+        }
+
+        // Clean and normalize the query
+        const queryLower = query.toLowerCase()
+            .replace(/what are news about\s*:\s*/i, '')  // Remove "what are news about :"
+            .replace(/what are news about/i, '')          // Remove "what are news about"
+            .replace(/news about/i, '')                   // Remove "news about"
+            .replace(/about/i, '')                        // Remove "about"
+            .trim();
+
+        if (!queryLower) {
+            return Math.max(0.8 - (index * 0.08), 0.4);
+        }
+
+        // Extract the main entity/company name from the query
+        const mainEntity = queryLower.split(/\s+/)[0]; // Take first word as main entity
+
+        const textLower = source.text.toLowerCase();
+        const titleLower = source.metadata?.article_title?.toLowerCase() || '';
+
+        // CRITICAL: Company/Entity matching gets highest priority
+        if (mainEntity && (textLower.includes(mainEntity) || titleLower.includes(mainEntity))) {
+            score += 0.6; // Major bonus for matching the main entity
+        }
+
+        // Check for exact phrase matches in title (highest relevance)
+        if (titleLower.includes(queryLower)) {
+            score += 0.3;
+        }
+
+        // Check for exact phrase matches in text
+        if (textLower.includes(queryLower)) {
+            score += 0.2;
+        }
+
+        // Check for individual word matches (excluding common words)
+        const queryWords = queryLower.split(/\s+/).filter(word =>
+            word.length > 2 &&
+            !['the', 'and', 'or', 'but', 'for', 'with', 'about', 'news', 'what', 'are'].includes(word)
+        );
+
+        let wordMatches = 0;
+        queryWords.forEach(word => {
+            if (textLower.includes(word) || titleLower.includes(word)) {
+                wordMatches++;
+            }
+        });
+
+        // Bonus for matching more query words
+        if (wordMatches > 0) {
+            score += (wordMatches / queryWords.length) * 0.15;
+        }
+
+        // Position penalty (much smaller now since relevance is more important)
+        score -= (index * 0.05);
+
+        // Quality bonuses (smaller impact)
+        if (source.text) {
+            const textLength = source.text.length;
+            if (textLength >= 200 && textLength <= 800) {
+                score += 0.02;
+            }
+        }
+
+        // Metadata quality bonuses (smaller impact)
+        if (source.metadata) {
+            const metadata = source.metadata;
+            if (metadata.article_title && metadata.article_title !== 'Unknown Title') {
+                score += 0.01;
+            }
+        }
+
+        // Ensure score is within bounds and add small random variation to break ties
+        const finalScore = Math.min(Math.max(score, 0.1), 1.0);
+        return finalScore;
+    }
+
+    getCurrentQuery() {
+        // Try to get the current query from the last user message
+        if (this.conversationHistory.length > 0) {
+            const lastUserMessage = this.conversationHistory.findLast(msg => msg.role === 'user');
+            return lastUserMessage ? lastUserMessage.content : '';
+        }
+        return '';
+    }
+
+
 
     // SIMPLIFIED: Reranking info update function commented out
     // updateRerankingInfo(rerankingInfo) {
@@ -212,87 +456,61 @@ class ChatApp {
 
     clearChat() {
         const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
         chatMessages.innerHTML = `
             <div class="message system-message">
                 <div class="message-content">
                     <i class="fas fa-info-circle"></i>
-                    Welcome! I'm your AI assistant powered by ChatGPT and enhanced with RAG (Retrieval-Augmented Generation). 
-                    I can help you with questions and provide context-aware responses using the knowledge base.
+                    Welcome! I'm RegIna,
+                                your AI powered regulatory intelligence assistant. I can
+                                help you with questions about FDA Warning Letters and the
+                                recent regulatory news.
                 </div>
             </div>
         `;
         this.conversationHistory = [];
         this.updateSources([]);
-    }
 
-    showDocumentModal() {
-        document.getElementById('documentModal').style.display = 'block';
-        document.getElementById('documentText').focus();
-    }
-
-    hideDocumentModal() {
-        document.getElementById('documentModal').style.display = 'none';
-        document.getElementById('documentText').value = '';
-        document.getElementById('documentMetadata').value = '';
-    }
-
-    async addDocument() {
-        const text = document.getElementById('documentText').value.trim();
-        const metadata = document.getElementById('documentMetadata').value.trim();
-
-        if (!text) {
-            alert('Please enter document text');
-            return;
-        }
-
-        const submitButton = document.getElementById('submitDocumentButton');
-        const originalText = submitButton.innerHTML;
-        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
-        submitButton.disabled = true;
-
-        try {
-            const response = await fetch('/api/add-document', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    text: text,
-                    metadata: metadata
-                })
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                alert('Document added successfully!');
-                this.hideDocumentModal();
-            } else {
-                alert(`Error: ${data.detail || 'Failed to add document'}`);
-            }
-        } catch (error) {
-            console.error('Error adding document:', error);
-            alert('Error adding document. Please try again.');
-        } finally {
-            submitButton.innerHTML = originalText;
-            submitButton.disabled = false;
+        // Reset sources count to 0
+        const sourcesCount = document.getElementById('sourcesCount');
+        if (sourcesCount) {
+            sourcesCount.textContent = '(0)';
+            sourcesCount.className = 'sources-count no-sources';
         }
     }
 
-    saveApiKey() {
-        const apiKey = document.getElementById('openaiKey').value.trim();
-        if (apiKey) {
-            localStorage.setItem('openai_api_key', apiKey);
-            alert('API key saved!');
+
+
+
+
+
+
+    setInitialStatus() {
+        const apiStatusDot = document.getElementById('apiStatusDot');
+        const milvusStatusDot = document.getElementById('milvusStatusDot');
+
+        if (apiStatusDot) {
+            apiStatusDot.className = 'status-dot checking';
+            apiStatusDot.title = 'API: Checking...';
+        }
+        if (milvusStatusDot) {
+            milvusStatusDot.className = 'status-dot checking';
+            milvusStatusDot.title = 'Milvus: Checking...';
+        }
+    }
+
+    setInitialCollectionState() {
+        // Ensure RSS Feeds button is active by default
+        const rssButton = document.getElementById('collectionRssFeeds');
+        const fdaButton = document.getElementById('collectionFdaWarningLetters');
+
+        if (rssButton && fdaButton) {
+            rssButton.classList.add('active');
+            fdaButton.classList.remove('active');
+            console.log('✅ Initial collection state set: RSS Feeds active');
         } else {
-            alert('Please enter an API key');
-        }
-    }
-
-    loadSettings() {
-        const savedApiKey = localStorage.getItem('openai_api_key');
-        if (savedApiKey) {
-            document.getElementById('openaiKey').value = savedApiKey;
+            console.error('❌ Collection buttons not found');
         }
     }
 
@@ -301,109 +519,137 @@ class ChatApp {
             const response = await fetch('/api/health');
             const data = await response.json();
 
-            const apiStatus = document.getElementById('apiStatus');
-            const milvusStatus = document.getElementById('milvusStatus');
+            const apiStatusDot = document.getElementById('apiStatusDot');
+            const milvusStatusDot = document.getElementById('milvusStatusDot');
+
             if (response.ok) {
-                apiStatus.textContent = '✅ Healthy';
-                apiStatus.className = 'status-value healthy';
-                milvusStatus.textContent = '✅ Connected';
-                milvusStatus.className = 'status-value healthy';
+                if (apiStatusDot) {
+                    apiStatusDot.className = 'status-dot healthy';
+                    apiStatusDot.title = 'API: Healthy';
+                }
+                if (milvusStatusDot) {
+                    milvusStatusDot.className = 'status-dot healthy';
+                    milvusStatusDot.title = 'Milvus: Connected';
+                }
             } else {
-                apiStatus.textContent = '❌ Error';
-                apiStatus.className = 'status-value error';
-                milvusStatus.textContent = '❌ Unknown';
-                milvusStatus.className = 'status-value error';
+                if (apiStatusDot) {
+                    apiStatusDot.className = 'status-dot error';
+                    apiStatusDot.title = 'API: Error';
+                }
+                if (milvusStatusDot) {
+                    milvusStatusDot.className = 'status-dot error';
+                    milvusStatusDot.title = 'Milvus: Error';
+                }
             }
         } catch (error) {
             console.error('Health check failed:', error);
-            document.getElementById('apiStatus').textContent = '❌ Error';
-            document.getElementById('apiStatus').className = 'status-value error';
-            document.getElementById('milvusStatus').textContent = '❌ Unknown';
-            document.getElementById('milvusStatus').className = 'status-value error';
+            const apiStatusDot = document.getElementById('apiStatusDot');
+            const milvusStatusDot = document.getElementById('milvusStatusDot');
+
+            if (apiStatusDot) {
+                apiStatusDot.className = 'status-dot error';
+                apiStatusDot.title = 'API: Error';
+            }
+            if (milvusStatusDot) {
+                milvusStatusDot.className = 'status-dot error';
+                milvusStatusDot.title = 'Milvus: Error';
+            }
         }
 
-        // Check OpenAI key and RAG config
-        await this.checkOpenAIKey();
-        await this.checkRAGConfig();
+        // RAG config check removed - no longer needed
     }
 
-    async checkOpenAIKey() {
+
+
+
+
+    async loadLatestInfo() {
+        await Promise.all([
+            this.loadLatestFDAWarningLetters(),
+            this.loadLatestNews()
+        ]);
+    }
+
+    async loadLatestFDAWarningLetters() {
         try {
-            const response = await fetch('/api/config');
+            const response = await fetch('/api/search?query=warning%20letter&collection=fda_warning_letters&limit=5');
             const data = await response.json();
 
-            if (data.openai_configured) {
-                document.getElementById('openaiKeyStatus').textContent = '✅ Configured';
-                document.getElementById('openaiKeyStatus').className = 'status-value healthy';
+            const tbody = document.getElementById('fdaWarningLettersBody');
+            if (!tbody) return;
+
+            if (data.sources && data.sources.length > 0) {
+                tbody.innerHTML = data.sources.map(source => `
+                    <tr>
+                        <td>${this.formatDate(source.metadata?.date || source.metadata?.published_date || 'N/A')}</td>
+                        <td>${source.metadata?.company || source.metadata?.issuer || 'N/A'}</td>
+                        <td>${this.truncateText(source.metadata?.subject || source.content || 'N/A', 60)}</td>
+                        <td><span class="status-badge warning">Active</span></td>
+                    </tr>
+                `).join('');
             } else {
-                document.getElementById('openaiKeyStatus').textContent = '❌ Not Configured';
-                document.getElementById('openaiKeyStatus').className = 'status-value error';
+                tbody.innerHTML = '<tr><td colspan="4" class="no-data">No warning letters found</td></tr>';
             }
         } catch (error) {
-            console.error('OpenAI key check failed:', error);
-            document.getElementById('openaiKeyStatus').textContent = '❌ Error';
-            document.getElementById('openaiKeyStatus').className = 'status-value error';
+            console.error('Failed to load FDA warning letters:', error);
+            const tbody = document.getElementById('fdaWarningLettersBody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="4" class="error-message">Failed to load data</td></tr>';
+            }
         }
     }
 
-    async checkRAGConfig() {
+    async loadLatestNews() {
         try {
-            const response = await fetch('/api/config');
+            const response = await fetch('/api/search?query=regulatory%20news&collection=rss_feeds&limit=5');
             const data = await response.json();
 
-            const configText = `Strict: ${data.strict_rag_only ? 'Yes' : 'No'}, Rerank: ${data.enable_reranking ? 'Yes' : 'No'}`;
-            document.getElementById('ragConfigStatus').textContent = configText;
-            document.getElementById('ragConfigStatus').className = 'status-value healthy';
+            const tbody = document.getElementById('recentNewsBody');
+            if (!tbody) return;
+
+            if (data.sources && data.sources.length > 0) {
+                tbody.innerHTML = data.sources.map(source => `
+                    <tr>
+                        <td>${this.formatDate(source.metadata?.published_date || source.metadata?.date || 'N/A')}</td>
+                        <td>${source.metadata?.source || source.metadata?.publisher || 'N/A'}</td>
+                        <td>${this.truncateText(source.metadata?.title || source.content || 'N/A', 60)}</td>
+                        <td><span class="status-badge news">Regulatory</span></td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4" class="no-data">No news found</td></tr>';
+            }
         } catch (error) {
-            console.error('RAG config check failed:', error);
-            document.getElementById('ragConfigStatus').textContent = '❌ Error';
-            document.getElementById('ragConfigStatus').className = 'status-value error';
+            console.error('Failed to load latest news:', error);
+            const tbody = document.getElementById('recentNewsBody');
+            if (tbody) {
+                tbody.innerHTML = '<tr><td colspan="4" class="error-message">Failed to load data</td></tr>';
+            }
         }
     }
 
-    async testConfiguration() {
+    formatDate(dateString) {
+        if (!dateString || dateString === 'N/A') return 'N/A';
         try {
-            console.log('🧪 Testing configuration...');
-
-            // Get the currently selected collection
-            const selectedCollection = document.getElementById('collectionSelect').value;
-
-            // Test search functionality
-            const searchResponse = await fetch('/api/test-search?query=stryker&limit=3');
-            const searchData = await searchResponse.json();
-
-            console.log('🔍 Search test result:', searchData);
-
-            if (searchData.sources_found > 0) {
-                alert(`✅ Search working! Found ${searchData.sources_found} Stryker sources`);
-            } else {
-                alert(`❌ Search not working. Found ${searchData.sources_found} sources`);
-            }
-
-            // Test chat functionality with selected collection
-            const chatResponse = await fetch(`/api/chat/${selectedCollection}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: 'What news do you have about Stryker?',
-                    conversation_history: []
-                })
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) return 'N/A';
+            return date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
             });
-
-            const chatData = await chatResponse.json();
-            console.log('💬 Chat test result:', chatData);
-
-            if (chatData.sources && chatData.sources.length > 0) {
-                alert(`✅ Chat working! Found ${chatData.sources.length} sources in ${selectedCollection}`);
-            } else {
-                alert(`❌ Chat not working. Found ${chatData.sources.length} sources in ${selectedCollection}`);
-            }
-
         } catch (error) {
-            console.error('Configuration test failed:', error);
-            alert('❌ Configuration test failed: ' + error.message);
+            return 'N/A';
         }
     }
+
+    truncateText(text, maxLength) {
+        if (!text || text === 'N/A') return 'N/A';
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+
 
     switchCollection(collectionName) {
         console.log(`🔄 Switching to collection: ${collectionName}`);
@@ -416,24 +662,36 @@ class ChatApp {
 
         // Show a notification
         const collectionLabels = {
-            'rss_feeds': 'RSS Feeds (Regulatory Intelligence)',
+            'rss_feeds': 'Regulatory News',
             'fda_warning_letters': 'FDA Warning Letters'
         };
 
         this.addMessageToChat('system', `Switched to ${collectionLabels[collectionName]} collection. You can now ask questions about this data.`);
+
+        // Reset sources count when switching collections
+        const sourcesCount = document.getElementById('sourcesCount');
+        if (sourcesCount) {
+            sourcesCount.textContent = '(0)';
+            sourcesCount.className = 'sources-count no-sources';
+        }
     }
 
     updateCollectionDisplay(collectionName) {
         // Update any UI elements that show the current collection
         const collectionLabels = {
-            'rss_feeds': '📰 RSS Feeds Collection',
-            'fda_warning_letters': '⚠️ FDA Warning Letters Collection'
+            'rss_feeds': '📰 Regulatory News',
+            'fda_warning_letters': '⚠️ FDA Warning Letters'
         };
 
-        // Update the collection indicator in the header
-        const indicator = document.getElementById('collectionIndicator');
-        if (indicator) {
-            indicator.textContent = collectionLabels[collectionName];
+        // Update the collection button states
+        const rssButton = document.getElementById('collectionRssFeeds');
+        const fdaButton = document.getElementById('collectionFdaWarningLetters');
+
+        if (rssButton) {
+            rssButton.classList.toggle('active', collectionName === 'rss_feeds');
+        }
+        if (fdaButton) {
+            fdaButton.classList.toggle('active', collectionName === 'fda_warning_letters');
         }
 
         console.log(`Current collection: ${collectionLabels[collectionName]}`);
@@ -448,32 +706,71 @@ class ChatApp {
     // Authentication Methods
     async checkAuthStatus() {
         try {
+            console.log('🔍 Checking authentication status...');
+
+            // Debug: Check if we have any cookies
+            console.log('🍪 All cookies:', document.cookie);
+
             const response = await fetch('/api/auth/status');
+            console.log('📡 Auth status response:', response.status);
+
             if (response.ok) {
                 const authData = await response.json();
+                console.log('🔐 Auth data:', authData);
+
                 if (authData.authenticated) {
+                    console.log('✅ User is authenticated:', authData.user);
                     this.showAuthenticatedUser(authData.user);
                     this.enablePersonalFeatures();
                 } else {
+                    console.log('❌ User is not authenticated');
                     this.showUnauthenticatedUser();
                     this.disablePersonalFeatures();
                 }
             } else {
+                console.log('❌ Auth status request failed:', response.status);
                 this.showUnauthenticatedUser();
                 this.disablePersonalFeatures();
             }
         } catch (error) {
-            console.log('User not authenticated');
+            console.log('❌ Auth status check error:', error);
             this.showUnauthenticatedUser();
             this.disablePersonalFeatures();
         }
     }
 
     showAuthenticatedUser(user) {
-        document.getElementById('authSection').style.display = 'flex';
-        document.getElementById('loginSection').style.display = 'none';
-        document.getElementById('userName').textContent = user.full_name || user.email;
-        
+        console.log('👤 Showing authenticated user UI for:', user);
+
+        const authSection = document.getElementById('authSection');
+        const loginSection = document.getElementById('loginSection');
+        const userName = document.getElementById('userName');
+
+        console.log('🔍 Auth section element:', authSection);
+        console.log('🔍 Login section element:', loginSection);
+        console.log('🔍 User name element:', userName);
+
+        if (authSection) {
+            authSection.style.display = 'flex';
+            console.log('✅ Auth section displayed');
+        } else {
+            console.log('❌ Auth section not found');
+        }
+
+        if (loginSection) {
+            loginSection.style.display = 'none';
+            console.log('✅ Login section hidden');
+        } else {
+            console.log('❌ Login section not found');
+        }
+
+        if (userName) {
+            userName.textContent = user.full_name || user.email;
+            console.log('✅ User name updated');
+        } else {
+            console.log('❌ User name element not found');
+        }
+
         // Hide auth info message for authenticated users
         const authInfoMessage = document.getElementById('authInfoMessage');
         if (authInfoMessage) {
@@ -482,9 +779,28 @@ class ChatApp {
     }
 
     showUnauthenticatedUser() {
-        document.getElementById('authSection').style.display = 'none';
-        document.getElementById('loginSection').style.display = 'flex';
-        
+        console.log('👤 Showing unauthenticated user UI');
+
+        const authSection = document.getElementById('authSection');
+        const loginSection = document.getElementById('loginSection');
+
+        console.log('🔍 Auth section element:', authSection);
+        console.log('🔍 Login section element:', loginSection);
+
+        if (authSection) {
+            authSection.style.display = 'none';
+            console.log('✅ Auth section hidden');
+        } else {
+            console.log('❌ Auth section not found');
+        }
+
+        if (loginSection) {
+            loginSection.style.display = 'flex';
+            console.log('✅ Login section displayed');
+        } else {
+            console.log('❌ Login section not found');
+        }
+
         // Show auth info message for unauthenticated users
         const authInfoMessage = document.getElementById('authInfoMessage');
         if (authInfoMessage) {
@@ -529,5 +845,19 @@ class ChatApp {
 
 // Initialize the chat application when the page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new ChatApp();
+    const app = new ChatApp();
+
+    // Debug: Check if we're coming back from login
+    console.log('🚀 ChatApp initialized');
+    console.log('🔍 Current URL:', window.location.href);
+    console.log('🔍 Referrer:', document.referrer);
+
+    // If we came from login page, wait a bit and recheck auth
+    if (document.referrer.includes('/auth/login') || document.referrer.includes('/auth/signin')) {
+        console.log('🔄 Coming from login page, waiting to recheck auth...');
+        setTimeout(() => {
+            console.log('🔄 Rechecking auth after login...');
+            app.checkAuthStatus();
+        }, 2000);
+    }
 }); 
