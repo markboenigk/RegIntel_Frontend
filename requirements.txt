@@ -31,4 +31,4 @@ passlib[bcrypt]==1.7.4
 itsdangerous==2.1.2
 
 # Data validation
-pydantic[email]==2.5.0
+pydantic[email]>=2.11.7,<3.0.0
