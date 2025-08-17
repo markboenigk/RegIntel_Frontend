@@ -292,3 +292,4 @@ This project demonstrates advanced capabilities in:
 **Built with ❤️ for the regulatory intelligence community**
 
 *RegIntel Frontend - Making regulatory compliance intelligent and accessible*
+# Test commit to trigger CI pipeline
