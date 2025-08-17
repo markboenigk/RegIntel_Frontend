@@ -293,3 +293,4 @@ This project demonstrates advanced capabilities in:
 
 *RegIntel Frontend - Making regulatory compliance intelligent and accessible*
 # Test commit to trigger CI pipeline
+# Force fresh CI run with updated secrets
