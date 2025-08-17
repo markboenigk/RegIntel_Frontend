@@ -28,8 +28,9 @@
                             <div class="auth-buttons">
                                 <a href="/auth/profile-page" class="profile-button">
                                     <i class="fas fa-user"></i> Profile </a>
-                                <a href="#" id="logoutButton" class="logout-button">
-                                    <i class="fas fa-sign-out-alt"></i> Logout </a>
+                                <button id="forceLogoutButton" class="logout-button"
+                                    style="background: none; border: none; color: inherit; cursor: pointer; font: inherit;">
+                                    <i class="fas fa-sign-out-alt"></i> Logout </button>
                             </div>
                         </div>
                     </div>
@@ -185,20 +186,25 @@
             </div>
         </div>
         <div class="info-table-section">
-            <h3><i class="fas fa-newspaper"></i> Most Recent News</h3>
+            <h3><i class="fas fa-newspaper"></i> Latest RSS News</h3>
             <div class="table-container">
+                <div style="margin-bottom: 15px; text-align: right;">
+                    <button id="refreshRSSBtn" class="action-button"
+                        style="background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+                        <i class="fas fa-sync"></i> Refresh RSS News </button>
+                </div>
                 <table class="info-table" id="recentNewsTable">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Source</th>
-                            <th>Headline</th>
+                            <th>Published Date</th>
+                            <th>Feed Source</th>
+                            <th>Article Title</th>
                             <th>Category</th>
                         </tr>
                     </thead>
                     <tbody id="recentNewsBody">
                         <tr>
-                            <td colspan="4" class="loading-message">Loading latest
+                            <td colspan="4" class="loading-message">Loading latest RSS
                                 news...</td>
                         </tr>
                     </tbody>
@@ -207,7 +213,277 @@
         </div>
     </div>
     </div>
-    <script src="{{ url_for('static', path='/js/chat.js') }}"></script>
+    <script src="{{ url_for('static', path='/js/chat.js') }}?v=2"></script>
+    <script>
+        // Check authentication status on page load and update UI
+        async function checkAuthAndUpdateUI() {
+            console.log('🔍 Checking authentication status...');
+
+            try {
+                const response = await fetch('/auth/me');
+                console.log('🔍 Auth check response status:', response.status);
+
+                if (response.ok) {
+                    const user = await response.json();
+                    console.log('🔍 User authenticated successfully');
+
+                    // Check if we have valid cookies (double-check authentication)
+                    const hasAuthCookie = document.cookie.includes('auth_token') ||
+                        document.cookie.includes('refresh_token') ||
+                        document.cookie.includes('supabase-auth-token');
+
+                    if (!hasAuthCookie) {
+                        console.log('⚠️ User appears authenticated but no auth cookies found - forcing logout');
+                        // Force logout by clearing any remaining state
+                        localStorage.clear();
+                        sessionStorage.clear();
+                        showUnauthenticatedUI();
+                        return;
+                    }
+
+                    // Show authenticated UI
+                    showAuthenticatedUI(user);
+                } else {
+                    console.log('🔍 User not authenticated');
+                    showUnauthenticatedUI();
+                }
+            } catch (error) {
+                console.error('🔍 Error checking auth status:', error);
+                showUnauthenticatedUI();
+            }
+        }
+
+        // Helper function to show authenticated UI
+        function showAuthenticatedUI(user) {
+            const authSection = document.getElementById('authSection');
+            const loginSection = document.getElementById('loginSection');
+
+            if (authSection && loginSection) {
+                authSection.style.display = 'flex';
+                loginSection.style.display = 'none';
+
+                // Update user name
+                const userName = document.getElementById('userName');
+                if (userName) {
+                    userName.textContent = user.full_name || user.email;
+                }
+            }
+        }
+
+        // Helper function to show unauthenticated UI
+        function showUnauthenticatedUI() {
+            const authSection = document.getElementById('authSection');
+            const loginSection = document.getElementById('loginSection');
+
+            if (authSection && loginSection) {
+                authSection.style.display = 'none';
+                loginSection.style.display = 'flex';
+            }
+        }
+
+        // Check auth on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAuthAndUpdateUI();
+            loadLatestRSSNews(); // Load RSS news on page load
+
+            // Add refresh button event listener
+            const refreshRSSBtn = document.getElementById('refreshRSSBtn');
+            console.log('🔍 Looking for refresh button with ID: refreshRSSBtn');
+            console.log('🔍 Found button element:', refreshRSSBtn);
+
+            if (refreshRSSBtn) {
+                console.log('✅ Adding click event listener to refresh button');
+                refreshRSSBtn.addEventListener('click', () => {
+                    console.log('🔄 Manual RSS refresh button clicked');
+                    loadLatestRSSNews();
+                });
+                console.log('✅ Event listener added successfully');
+            } else {
+                console.error('❌ Refresh button not found!');
+                console.log('🔍 Available buttons:', document.querySelectorAll('button'));
+            }
+        });
+
+        // Check auth when page becomes visible (in case user navigates back)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                console.log('🔍 Page became visible, checking auth status...');
+                checkAuthAndUpdateUI();
+                // Don't auto-refresh RSS news on visibility change to prevent data loss
+                // loadLatestRSSNews(); // Commented out to prevent unwanted refreshes
+            }
+        });
+
+        // Function to load latest RSS news
+        async function loadLatestRSSNews() {
+            try {
+                console.log('🔍 Loading latest RSS news...');
+                const response = await fetch('/api/rss-feeds/latest');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🔍 RSS news loaded successfully');
+                    displayRSSNews(data.articles);
+                } else {
+                    console.error('❌ Failed to load RSS news:', response.status);
+                    showRSSNewsError('Failed to load RSS news');
+                }
+            } catch (error) {
+                console.error('❌ Error loading RSS news:', error);
+                showRSSNewsError('Network error loading RSS news');
+            }
+        }
+
+        // Function to display RSS news in the table
+        function displayRSSNews(articles) {
+            const tbody = document.getElementById('recentNewsBody');
+
+            if (!articles || articles.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="no-data">No RSS news available</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let html = '';
+            articles.forEach(article => {
+                const date = new Date(article.article_published_date).toLocaleDateString();
+                const title = article.article_title || 'No title available';
+                const category = article.content_category || 'Uncategorized';
+
+                html += `
+                    <tr>
+                        <td>${date}</td>
+                        <td><strong>${article.article_feed_name || 'Unknown source'}</strong></td>
+                        <td><strong>${title}</strong></td>
+                        <td><span class="category-badge">${category}</span></td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        // Function to show RSS news error
+        function showRSSNewsError(message) {
+            const tbody = document.getElementById('recentNewsBody');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="error-message">${message}</td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Handle force logout button
+        document.addEventListener('DOMContentLoaded', () => {
+            const forceLogoutButton = document.getElementById('forceLogoutButton');
+            if (forceLogoutButton) {
+                forceLogoutButton.addEventListener('click', async () => {
+                    console.log('🔐 Force logout button clicked');
+
+                    try {
+                        // First try the normal logout
+                        const response = await fetch('/auth/signout', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        console.log('🔐 Logout response received');
+                    } catch (error) {
+                        console.log('🔐 Logout request failed, continuing with force logout');
+                    }
+
+                    // Force clear everything regardless of backend response
+                    console.log('🔐 Force clearing all authentication data...');
+                    localStorage.clear();
+                    sessionStorage.clear();
+
+                    // Clear all cookies aggressively
+                    document.cookie.split(";").forEach(function (c) {
+                        const cookieName = c.replace(/^ +/, "").split("=")[0];
+                        console.log('🍪 Force clearing cookie:', cookieName);
+                        document.cookie = cookieName + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+                        document.cookie = cookieName + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=" + window.location.hostname;
+                        document.cookie = cookieName + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=." + window.location.hostname;
+                    });
+
+                    // Force refresh the page
+                    console.log('🔄 Force refreshing page...');
+                    window.location.reload(true);
+                });
+            }
+        });
+
+        // Add CSS for better RSS news table styling
+        const style = document.createElement('style');
+        style.textContent = `
+            .info-table td {
+                padding: 12px;
+                border-bottom: 1px solid #e1e5e9;
+                vertical-align: top;
+            }
+            
+            .info-table td:nth-child(1) {
+                width: 120px;
+                font-weight: 600;
+                color: #667eea;
+            }
+            
+            .info-table td:nth-child(2) {
+                width: 150px;
+                font-weight: 600;
+                color: #333;
+            }
+            
+            .info-table td:nth-child(3) {
+                width: 400px;
+                font-weight: 600;
+                color: #333;
+                line-height: 1.4;
+            }
+            
+            .info-table td:nth-child(4) {
+                color: #333;
+                line-height: 1.5;
+            }
+            
+            .category-badge {
+                background: #667eea;
+                color: white;
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            
+            .loading-message {
+                text-align: center;
+                color: #666;
+                font-style: italic;
+            }
+            
+            .no-data {
+                text-align: center;
+                color: #999;
+                font-style: italic;
+            }
+            
+            .error-message {
+                text-align: center;
+                color: #ff4757;
+                font-style: italic;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
 </body>
 
 </html>

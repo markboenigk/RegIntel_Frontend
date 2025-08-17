@@ -38,8 +38,14 @@ class AuthMiddleware:
         try:
             # Try using Supabase client first
             try:
-                # Set the session with the token
-                self.supabase.auth.set_session(token, None)
+                # Set the session with the token (handle None refresh token)
+                try:
+                    self.supabase.auth.set_session(token, None)
+                    print(f"🔐 Session set successfully with access token only")
+                except Exception as session_error:
+                    print(f"⚠️ Session setting failed: {str(session_error)}")
+                    # Continue with JWT fallback
+                    raise Exception("Session setting failed")
                 
                 # Get user from the session
                 user_response = self.supabase.auth.get_user()
@@ -57,27 +63,60 @@ class AuthMiddleware:
                     raise Exception("No user data in response")
                     
             except Exception as supabase_error:
-                # Fallback: Try JWT decoding
+                print(f"⚠️ Supabase authentication failed, attempting JWT fallback: {str(supabase_error)}")
+                # Fallback: Try JWT decoding with proper validation
                 try:
-                    # Use a dummy key since we're not verifying
-                    # Disable all validations including audience
-                    decoded = jwt.decode(
-                        token, 
-                        key="dummy", 
-                        options={
-                            "verify_signature": False,
-                            "verify_aud": False,
-                            "verify_exp": False,
-                            "verify_iat": False,
-                            "verify_nbf": False,
-                            "verify_iss": False,
-                            "verify_sub": False,
-                            "verify_jti": False
-                        }
-                    )
+                    jwt_secret = supabase_config.get_jwt_secret()
+                    print(f"🔐 JWT fallback: Secret configured: {'✅ Yes' if jwt_secret else '❌ No'}")
+                    if not jwt_secret or jwt_secret == "":
+                        print(f"❌ JWT secret not configured, cannot validate token")
+                        raise HTTPException(status_code=401, detail="JWT secret not configured")
+                    
+                    # Proper JWT validation with real secret - try multiple approaches
+                    print(f"🔐 Attempting JWT decode with secret: {'✅ Configured' if jwt_secret else '❌ Not configured'}")
+                    
+                    # First try with strict validation
+                    try:
+                        decoded = jwt.decode(
+                            token, 
+                            key=jwt_secret,
+                            algorithms=["HS256"],
+                            audience="authenticated",
+                            issuer="supabase"
+                        )
+                        print(f"🔐 JWT decode successful (strict), claims: {list(decoded.keys())}")
+                    except Exception as strict_error:
+                        print(f"⚠️ Strict JWT validation failed: {str(strict_error)}")
+                        
+                        # Try with more lenient validation (no audience/issuer checks)
+                        try:
+                            decoded = jwt.decode(
+                                token, 
+                                key=jwt_secret,
+                                algorithms=["HS256"]
+                            )
+                            print(f"🔐 JWT decode successful (lenient), claims: {list(decoded.keys())}")
+                        except Exception as lenient_error:
+                            print(f"⚠️ Lenient JWT validation failed: {str(lenient_error)}")
+                            
+                            # Try with just the secret and algorithm
+                            try:
+                                decoded = jwt.decode(
+                                    token, 
+                                    key=jwt_secret,
+                                    algorithms=["HS256"],
+                                    options={"verify_signature": True, "verify_aud": False, "verify_iss": False}
+                                )
+                                print(f"🔐 JWT decode successful (minimal), claims: {list(decoded.keys())}")
+                            except Exception as minimal_error:
+                                print(f"⚠️ Minimal JWT validation failed: {str(minimal_error)}")
+                                raise Exception(f"All JWT validation methods failed: {str(minimal_error)}")
+                    
+                    # Validate required claims
+                    if not decoded.get("sub") or not decoded.get("email"):
+                        raise HTTPException(status_code=401, detail="Invalid token claims")
                     
                     # Create user profile from decoded token
-                    # Convert Unix timestamps to ISO format strings
                     created_at = decoded.get("iat", 0)
                     last_sign_in = decoded.get("iat", 0)
                     
@@ -104,8 +143,18 @@ class AuthMiddleware:
                     
                     return user_profile
                     
+                except JWTError as jwt_error:
+                    error_msg = str(jwt_error).lower()
+                    if "expired" in error_msg:
+                        raise HTTPException(status_code=401, detail="Token has expired")
+                    elif "signature" in error_msg:
+                        raise HTTPException(status_code=401, detail="Invalid token signature")
+                    else:
+                        raise HTTPException(status_code=401, detail="Invalid token")
                 except Exception as jwt_error:
-                    raise HTTPException(status_code=401, detail=f"Invalid token format: {str(jwt_error)}")
+                    print(f"⚠️ JWT fallback failed: {str(jwt_error)}")
+                    print(f"⚠️ JWT error type: {type(jwt_error)}")
+                    raise HTTPException(status_code=401, detail="Authentication failed")
             
         except Exception as e:
             raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
@@ -115,12 +164,12 @@ class AuthMiddleware:
         try:
             # Try to get token from cookies first
             print(f"🔍 Checking cookies in request: {dict(request.cookies)}")
-            print(f"🔍 All cookie keys: {list(request.cookies.keys())}")
+            print(f"🔍 Cookies found: {len(request.cookies)}")
             
             token = request.cookies.get("auth_token")
             print(f"🔍 Auth token found: {'Yes' if token else 'No'}")
             if token:
-                print(f"🔍 Token length: {len(token)}")
+                print(f"🔍 Token found: {'Yes' if token else 'No'}")
             if not token:
                 return None
             
@@ -134,14 +183,37 @@ class AuthMiddleware:
                 
                 print(f"🔐 Access token: {'✅ Found' if access_token else '❌ Not found'}")
                 print(f"🔐 Refresh token: {'✅ Found' if refresh_token else '❌ Not found'}")
+                print(f"🔐 All cookies: {dict(request.cookies)}")
+                print(f"🔐 Cookie count: {len(request.cookies)}")
                 
                 if not access_token:
                     print(f"❌ No access token found")
                     return None
                 
-                # Set the session with both tokens
-                self.supabase.auth.set_session(access_token, refresh_token)
-                print(f"🔐 Session set successfully")
+                # Set the session with both tokens (handle None refresh token)
+                if refresh_token:
+                    try:
+                        self.supabase.auth.set_session(access_token, refresh_token)
+                        print(f"🔐 Session set successfully with refresh token")
+                    except Exception as session_error:
+                        print(f"⚠️ Session setting with refresh token failed: {str(session_error)}")
+                        # Try with just access token
+                        try:
+                            self.supabase.auth.set_session(access_token, None)
+                            print(f"🔐 Session set successfully with access token only")
+                        except Exception as access_only_error:
+                            print(f"⚠️ Session setting with access token only failed: {str(access_only_error)}")
+                            # Continue with JWT fallback
+                            raise Exception("All Supabase session methods failed")
+                else:
+                    # Try to set session with just access token
+                    try:
+                        self.supabase.auth.set_session(access_token, None)
+                        print(f"🔐 Session set successfully with access token only")
+                    except Exception as session_error:
+                        print(f"⚠️ Session setting failed: {str(session_error)}")
+                        # Continue with JWT fallback
+                        raise Exception("Session setting failed")
                 
                 # Get user from the session
                 print(f"🔐 Getting user from session...")

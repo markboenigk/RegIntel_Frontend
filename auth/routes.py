@@ -5,10 +5,12 @@ Authentication routes for user management
 from fastapi import APIRouter, Request, Response, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from .models import UserSignUp, UserSignIn, UserProfile, AuthResponse, PasswordReset, PasswordUpdate, UserUpdate
+from .models import UserSignUp, UserSignIn, UserProfile, AuthResponse, PasswordReset, PasswordUpdate, UserUpdate, UserQuery, UserQueryCreate, UserQueryResponse
 from .config import supabase_config
 from .middleware import get_current_user, get_optional_user
 import json
+from datetime import datetime
+from typing import List
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 templates = Jinja2Templates(directory="templates")
@@ -165,13 +167,28 @@ async def signin(request: UserSignIn, response: Response):
 async def signout(response: Response):
     """User sign out endpoint"""
     try:
-        # Clear authentication cookies
-        response.delete_cookie("auth_token", path="/")
-        response.delete_cookie("refresh_token", path="/")
+        print("🔐 Signout request received")
         
-        return {"message": "Sign out successful"}
+        # Clear authentication cookies with more comprehensive clearing
+        response.delete_cookie("auth_token", path="/", domain=None)
+        response.delete_cookie("refresh_token", path="/", domain=None)
+        
+        # Also try clearing with different path variations
+        response.delete_cookie("auth_token", path="/", domain=None)
+        response.delete_cookie("refresh_token", path="/", domain=None)
+        
+        # Clear any other potential auth-related cookies
+        response.delete_cookie("supabase-auth-token", path="/", domain=None)
+        response.delete_cookie("sb-access-token", path="/", domain=None)
+        response.delete_cookie("sb-refresh-token", path="/", domain=None)
+        
+        print("🔐 Cookies cleared successfully")
+        
+        # Return a JSON response instead of redirect to avoid cookie issues
+        return {"message": "Sign out successful", "redirect": "/"}
         
     except Exception as e:
+        print(f"❌ Signout error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Sign out error: {str(e)}")
 
 @router.post("/refresh")
@@ -337,3 +354,140 @@ async def get_current_user_info(current_user: UserProfile = Depends(get_current_
 async def profile_page(request: Request, current_user: UserProfile = Depends(get_current_user)):
     """Serve the profile page"""
     return templates.TemplateResponse("auth/profile.html", {"request": request}) 
+
+@router.post("/queries", response_model=UserQuery)
+async def save_user_query(
+    query_data: UserQueryCreate,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Save a user's search query"""
+    try:
+        supabase = supabase_config.get_client()
+        
+        # Create query record
+        query_record = {
+            "user_id": current_user.id,
+            "query_text": query_data.query_text,
+            "collection_name": query_data.collection_name,
+            "timestamp": datetime.utcnow().isoformat(),
+            "response_length": query_data.response_length,
+            "sources_count": query_data.sources_count
+        }
+        
+        # Insert into user_queries table
+        result = supabase.table("user_queries").insert(query_record).execute()
+        
+        if result.data:
+            saved_query = result.data[0]
+            return UserQuery(
+                id=saved_query.get("id"),
+                user_id=saved_query["user_id"],
+                query_text=saved_query["query_text"],
+                collection_name=saved_query["collection_name"],
+                timestamp=datetime.fromisoformat(saved_query["timestamp"]),
+                response_length=saved_query.get("response_length"),
+                sources_count=saved_query.get("sources_count")
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save query")
+            
+    except Exception as e:
+        print(f"Error saving user query: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to save query: {str(e)}")
+
+@router.get("/queries", response_model=UserQueryResponse)
+async def get_user_queries(
+    current_user: UserProfile = Depends(get_current_user),
+    limit: int = 20,
+    offset: int = 0
+):
+    """Get user's search query history"""
+    try:
+        supabase = supabase_config.get_client()
+        
+        # Query user_queries table
+        result = supabase.table("user_queries")\
+            .select("*")\
+            .eq("user_id", current_user.id)\
+            .order("timestamp", desc=True)\
+            .range(offset, offset + limit - 1)\
+            .execute()
+        
+        if result.data is not None:
+            queries = []
+            for query_data in result.data:
+                query = UserQuery(
+                    id=query_data.get("id"),
+                    user_id=query_data["user_id"],
+                    query_text=query_data["query_text"],
+                    collection_name=query_data["collection_name"],
+                    timestamp=datetime.fromisoformat(query_data["timestamp"]),
+                    response_length=query_data.get("response_length"),
+                    sources_count=query_data.get("sources_count")
+                )
+                queries.append(query)
+            
+            # Get total count
+            count_result = supabase.table("user_queries")\
+                .select("id", count="exact")\
+                .eq("user_id", current_user.id)\
+                .execute()
+            
+            total_count = count_result.count if count_result.count is not None else len(queries)
+            
+            return UserQueryResponse(
+                queries=queries,
+                total_count=total_count
+            )
+        else:
+            return UserQueryResponse(
+                queries=[],
+                total_count=0
+            )
+            
+    except Exception as e:
+        print(f"Error retrieving user queries: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve queries: {str(e)}")
+
+@router.delete("/queries/{query_id}")
+async def delete_user_query(
+    query_id: str,
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Delete a specific user query"""
+    try:
+        supabase = supabase_config.get_client()
+        
+        # Verify ownership and delete
+        result = supabase.table("user_queries")\
+            .delete()\
+            .eq("id", query_id)\
+            .eq("user_id", current_user.id)\
+            .execute()
+        
+        if result.data:
+            return {"message": "Query deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Query not found or not owned by user")
+            
+    except Exception as e:
+        print(f"Error deleting user query: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete query: {str(e)}")
+
+@router.delete("/queries")
+async def clear_user_queries(current_user: UserProfile = Depends(get_current_user)):
+    """Clear all user queries"""
+    try:
+        supabase = supabase_config.get_client()
+        
+        # Delete all queries for the user
+        result = supabase.table("user_queries")\
+            .delete()\
+            .eq("user_id", current_user.id)\
+            .execute()
+        
+        return {"message": f"Cleared {len(result.data) if result.data else 0} queries"}
+        
+    except Exception as e:
+        print(f"Error clearing user queries: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear queries: {str(e)}") 

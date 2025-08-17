@@ -501,22 +501,7 @@ input[type="number"] {
     margin-bottom: 0;
 }
 
-.source-item .score {
-    font-weight: 600;
-    color: #007aff;
-}
-
-.confidence-badge {
-    background: linear-gradient(135deg, #007aff 0%, #0056b3 100%);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    margin-left: 8px;
-    display: inline-block;
-    box-shadow: 0 1px 3px rgba(0, 122, 255, 0.3);
-}
+/* Confidence scoring styles removed */
 
 .source-item small {
     color: #86868b;
@@ -567,24 +552,7 @@ input[type="number"] {
     margin-right: 4px;
 }
 
-.confidence-info {
-    background: #e3f2fd;
-    border: 1px solid #bbdefb;
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-top: 8px;
-    text-align: center;
-}
-
-.confidence-info p {
-    margin: 0;
-    color: #1976d2;
-    font-size: 0.8rem;
-}
-
-.confidence-info i {
-    margin-right: 4px;
-}
+/* Confidence info styles removed */
 
 
 
@@ -1596,6 +1564,8 @@ html {
     gap: 12px;
     color: #6c757d;
     font-style: italic;
+    /* Ensure animations stop when element is removed */
+    animation-fill-mode: forwards;
 }
 
 .typing-indicator i {

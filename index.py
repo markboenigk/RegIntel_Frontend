@@ -33,18 +33,12 @@ if not MILVUS_URI:
 if not MILVUS_TOKEN:
     raise ValueError("❌ CRITICAL: MILVUS_TOKEN environment variable is required")
 
-# Debug: Print environment variable status
+# Debug: Print environment variable status (SECURE)
 print(f"🔧 DEBUG: Environment variables loaded:")
 print(f"   OPENAI_API_KEY: {'✅ Set' if OPENAI_API_KEY else '❌ Not set'}")
 print(f"   MILVUS_URI: {'✅ Set' if MILVUS_URI else '❌ Not set'}")
 print(f"   MILVUS_TOKEN: {'✅ Set' if MILVUS_TOKEN else '❌ Not set'}")
-if OPENAI_API_KEY:
-    print(f"   OpenAI Key length: {len(OPENAI_API_KEY)} characters")
-    print(f"   OpenAI Key starts with: {OPENAI_API_KEY[:20]}...")
-if MILVUS_TOKEN:
-    print(f"   Milvus Token length: {len(MILVUS_TOKEN)} characters")
-    print(f"   Milvus Token starts with: {MILVUS_TOKEN[:20]}...")
-    print(f"   Milvus Token ends with: ...{MILVUS_TOKEN[-20:]}")
+# SECURITY: Never log actual credential content or lengths
 
 # Collection names - configurable via environment variables
 FDA_WARNING_LETTERS_COLLECTION = os.getenv("FDA_WARNING_LETTERS_COLLECTION", "fda_warning_letters")
@@ -73,6 +67,8 @@ print(f"   RATE_LIMIT_REQUESTS: {RATE_LIMIT_REQUESTS}")
 print(f"   RATE_LIMIT_WINDOW: {RATE_LIMIT_WINDOW} seconds")
 
 # Rate limiting storage (in production, use Redis or similar)
+# SECURITY: In-memory storage can be bypassed by server restart
+# TODO: Implement Redis-based rate limiting for production
 rate_limit_storage = {}
 
 # Input validation patterns
@@ -138,10 +134,43 @@ class AddDocumentRequest(BaseModel):
 #     initial_search_multiplier: int = Field(..., description="Multiplier for initial search results")
 
 
-# Create FastAPI app
+# Create FastAPI app with security headers
 app = FastAPI(
     title="ChatGPT RAG API",
     version="1.0.0",
+)
+
+# SECURITY: Add security headers
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+
+# CORS and security configuration from environment variables
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000").split(",")
+
+# Environment-aware trusted hosts configuration
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+if ENVIRONMENT == "development":
+    # More permissive for local development
+    TRUSTED_HOSTS = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1,0.0.0.0").split(",")
+    print(f"🔧 Development mode: Trusted hosts set to {TRUSTED_HOSTS}")
+else:
+    # Strict for production
+    TRUSTED_HOSTS = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1").split(",")
+    print(f"🔒 Production mode: Trusted hosts set to {TRUSTED_HOSTS}")
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["*"],
+)
+
+# Trusted host middleware (restrict to your domains)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=TRUSTED_HOSTS
 )
 
 # Mount static files
@@ -664,7 +693,7 @@ async def search_similar_documents(query: str, limit: int = 10, collection_name:
             print(f"🔍 DEBUG: Returning {len(sources)} sources to LLM")
             
         else:
-            print(f"❌ DEBUG: No 'data' field found in response. Available fields: {list(result.keys())}")
+            print(f"❌ DEBUG: No 'data' field found in response")
         
         print(f"🔍 DEBUG: Final sources count: {len(sources)}")
         if sources:
@@ -1018,8 +1047,8 @@ async def chat(request: ChatRequest, client_request: Request, current_user = Dep
     try:
         # Get client IP for rate limiting 
         client_ip = client_request.client.host or "unknown"
-        print(f"🌐 DEBUG: Client IP detected: {client_ip}")
-        print(f"🌐 DEBUG: Client request headers: {dict(client_request.headers)}")
+        # SECURITY: Don't log client IPs in production
+        print(f"🌐 DEBUG: Client request received from: {'[REDACTED]' if client_ip != 'unknown' else 'unknown'}")
         
         # Check rate limiting
         rate_limit_status = check_rate_limit(client_ip)
@@ -1060,14 +1089,13 @@ async def chat(request: ChatRequest, client_request: Request, current_user = Dep
             print(f"⚠️ Validation warnings for IP {client_ip}: {content_validation['warnings'] + history_validation['warnings']}")
         
         # Search for relevant documents in rss_feeds collection (hardcoded for now)
-        print(f"🔍 DEBUG: About to call search_similar_documents with query: '{request.message}'")
-        print(f"🔍 DEBUG: Function search_similar_documents exists: {search_similar_documents is not None}")
-        print(f"🔍 DEBUG: Function type: {type(search_similar_documents)}")
+        print(f"🔍 DEBUG: About to call search_similar_documents")
+        print(f"🔍 DEBUG: Function search_similar_documents exists")
         
         sources = await search_similar_documents(request.message, collection_name="rss_feeds")
         
-        print(f"🔍 DEBUG: search_similar_documents returned {len(sources)} sources")
-        print(f"🔍 DEBUG: Sources: {sources}")
+        print(f"🔍 DEBUG: search_similar_documents completed")
+        print(f"🔍 DEBUG: Sources count: {len(sources)}")
 
         # Convert conversation history to ChatMessage objects
         history = [ChatMessage(role=msg.role, content=msg.content) 
@@ -1103,7 +1131,9 @@ async def chat(request: ChatRequest, client_request: Request, current_user = Dep
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal error details
+        print(f"❌ Internal error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/chat/{collection}", response_model=ChatResponse)
 async def chat_with_collection(collection: str, request: ChatRequest, client_request: Request, current_user = Depends(get_optional_user)):
@@ -1111,6 +1141,7 @@ async def chat_with_collection(collection: str, request: ChatRequest, client_req
     try:
         # Get client IP for rate limiting
         client_ip = client_request.client.host or "unknown"
+        # SECURITY: Don't log client IPs in production
         
         # Check rate limiting
         rate_limit_status = check_rate_limit(client_ip)
@@ -1185,7 +1216,9 @@ async def chat_with_collection(collection: str, request: ChatRequest, client_req
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # SECURITY: Don't expose internal error details
+        print(f"❌ Internal error in chat endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/config")
 async def get_config():
@@ -1322,8 +1355,8 @@ async def add_document(request: AddDocumentRequest):
         print(text_hash)
         
         # Debug: Show Milvus configuration being used
-        print(f"🔍 DEBUG: Using Milvus URI: {MILVUS_URI}")
-        print(f"🔍 DEBUG: Using Milvus Token: {MILVUS_TOKEN[:20]}...{MILVUS_TOKEN[-20:] if MILVUS_TOKEN else 'None'}")
+        print(f"🔍 DEBUG: Using Milvus URI: {'✅ Configured' if MILVUS_URI else '❌ Not configured'}")
+        print(f"🔍 DEBUG: Using Milvus Token: {'✅ Configured' if MILVUS_TOKEN else '❌ Not configured'}")
 
         # Insert into Zilliz using HTTP API
         insert_url = f"{MILVUS_URI}/v2/vectordb/entities/upsert"
@@ -2194,6 +2227,55 @@ async def explore_warning_letters():
         return {
             "success": False,
             "error": str(e)
+        }
+
+@app.get("/api/rss-feeds/latest")
+async def get_latest_rss_feeds():
+    """Get the latest 10 RSS feeds from the rss_feeds_gold table."""
+    try:
+        print(f"📰 DEBUG: Fetching latest RSS feeds from rss_feeds_gold")
+        
+        # Get Supabase client
+        supabase = supabase_config.get_client()
+        
+        # Query the latest 10 RSS feeds from rss_feeds_gold table
+        # Using the correct column names from your schema
+        response = supabase.table('rss_feeds_gold').select(
+            'article_feed_name,article_published_date,article_title,content_category'
+        ).order('article_published_date', desc=True).limit(10).execute()
+        
+        if hasattr(response, 'data'):
+            articles = response.data
+        else:
+            articles = response.get('data', [])
+        
+        print(f"📰 DEBUG: Found {len(articles)} RSS articles from rss_feeds_gold")
+        
+        # Filter out articles with missing required data
+        valid_articles = []
+        for article in articles:
+            if (article.get('article_feed_name') and 
+                article.get('article_published_date') and
+                article.get('article_title')):
+                valid_articles.append(article)
+        
+        print(f"📰 DEBUG: {len(valid_articles)} articles have complete data")
+        
+        return {
+            "success": True,
+            "articles": valid_articles,
+            "count": len(valid_articles),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error fetching RSS feeds: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "articles": []
         }
 
 if __name__ == "__main__":

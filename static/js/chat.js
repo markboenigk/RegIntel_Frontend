@@ -4,6 +4,7 @@ class ChatApp {
         this.conversationHistory = [];
         this.isLoading = false;
         this.lastSources = [];
+        this.isUserAuthenticated = false; // Track authentication status
         this.init();
     }
 
@@ -12,11 +13,19 @@ class ChatApp {
         this.setInitialStatus();
         this.checkHealth();
         this.autoResizeTextarea();
-        this.checkAuthStatus();
+
+        // Delay auth check slightly to ensure page is fully loaded
+        setTimeout(() => {
+            this.checkAuthStatus();
+        }, 100);
+
         this.loadLatestInfo();
 
         // Ensure initial collection state is set
         this.setInitialCollectionState();
+
+        // Clean up any lingering typing indicators from previous sessions
+        this.forceCleanupTypingIndicators();
     }
 
     bindEvents() {
@@ -84,7 +93,17 @@ class ChatApp {
 
         // User dropdown menu - removed, replaced with simple buttons
 
+        // Handle page unload to clean up any lingering typing indicators
+        window.addEventListener('beforeunload', () => {
+            this.forceCleanupTypingIndicators();
+        });
 
+        // Handle page visibility change to clean up if user switches tabs
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.forceCleanupTypingIndicators();
+            }
+        });
     }
 
     autoResizeTextarea() {
@@ -144,6 +163,14 @@ class ChatApp {
                 // Update sources
                 this.updateSources(data.sources);
 
+                // Save query for authenticated users
+                this.saveUserQuery(message, selectedCollection, data.response, data.sources);
+
+                // Show subtle indicator that query was saved (for authenticated users)
+                if (this.isUserAuthenticated) {
+                    this.showQuerySavedIndicator();
+                }
+
                 // SIMPLIFIED: No reranking info to display
                 // this.updateRerankingInfo(data.reranking_info);
             } else {
@@ -153,7 +180,10 @@ class ChatApp {
             console.error('Error sending message:', error);
             this.addMessageToChat('assistant', 'Sorry, I encountered an error. Please try again.');
         } finally {
+            // Ensure typing indicator is always hidden
             this.hideTypingIndicator();
+            // Double-check that loading state is reset
+            this.isLoading = false;
         }
     }
 
@@ -193,6 +223,9 @@ class ChatApp {
     showTypingIndicator() {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
+
+        // Clean up any existing typing indicators first
+        this.hideTypingIndicator();
 
         // Get the current collection to show appropriate message
         const activeButton = document.querySelector('.collection-button.active');
@@ -234,11 +267,32 @@ class ChatApp {
     hideTypingIndicator() {
         const typingIndicator = document.getElementById('typingIndicator');
         if (typingIndicator) {
+            // Stop all animations before removing
+            const animatedElements = typingIndicator.querySelectorAll('.typing-dot, i');
+            animatedElements.forEach(element => {
+                element.style.animation = 'none';
+                element.style.animationPlayState = 'paused';
+            });
+
+            // Remove the element
             typingIndicator.remove();
         }
         this.isLoading = false;
+    }
 
-
+    // Force cleanup method for any lingering typing indicators
+    forceCleanupTypingIndicators() {
+        const allTypingIndicators = document.querySelectorAll('#typingIndicator');
+        allTypingIndicators.forEach(indicator => {
+            // Stop animations
+            const animatedElements = indicator.querySelectorAll('.typing-dot, i');
+            animatedElements.forEach(element => {
+                element.style.animation = 'none';
+                element.style.animationPlayState = 'paused';
+            });
+            indicator.remove();
+        });
+        this.isLoading = false;
     }
 
     updateSources(sources) {
@@ -279,9 +333,7 @@ class ChatApp {
             const sourceDiv = document.createElement('div');
             sourceDiv.className = 'source-item';
 
-            // Display confidence score if available
-            const confidenceScore = source.score || source.confidence || this.calculateConfidenceScore(source, index, totalSources);
-            const scoreText = confidenceScore ? `Confidence: ${(confidenceScore * 100).toFixed(1)}%` : '';
+            // Confidence scoring removed
 
             // Create a more informative source display
             const metadata = source.metadata || {};
@@ -312,7 +364,7 @@ class ChatApp {
             }
 
             sourceDiv.innerHTML = `
-                <h4>Source ${index + 1} ${scoreText ? `<span class="confidence-badge">${scoreText}</span>` : ''}</h4>
+                <h4>Source ${index + 1}</h4>
                 ${metadataDisplay ? `<p class="source-metadata">${metadataDisplay}</p>` : ''}
                 <p class="source-text">${this.escapeHtml(source.text.substring(0, 200))}${source.text.length > 200 ? '...' : ''}</p>
             `;
@@ -327,11 +379,7 @@ class ChatApp {
             sourcesList.appendChild(limitMessage);
         }
 
-        // Add confidence score explanation
-        const confidenceInfo = document.createElement('div');
-        confidenceInfo.className = 'confidence-info';
-        confidenceInfo.innerHTML = `<p><small><i class="fas fa-info-circle"></i> Confidence scores indicate relevance to your query. Higher scores suggest better semantic matches.</small></p>`;
-        sourcesList.appendChild(confidenceInfo);
+        // Confidence score explanation removed
 
         // Auto-expand sources section when there are sources
         if (totalSources > 0) {
@@ -347,95 +395,7 @@ class ChatApp {
         this.lastSources = sources;
     }
 
-    calculateConfidenceScore(source, index, totalSources) {
-        // Calculate a confidence score based on actual relevance and quality
-        // This is a fallback when the backend doesn't provide scores
-
-        if (totalSources === 0) return 0;
-
-        let score = 0.0;
-
-        // Get the current query and clean it
-        const query = this.getCurrentQuery();
-        if (!query || !source.text) {
-            // Fallback to position-based scoring if no query or text
-            return Math.max(0.8 - (index * 0.08), 0.4);
-        }
-
-        // Clean and normalize the query
-        const queryLower = query.toLowerCase()
-            .replace(/what are news about\s*:\s*/i, '')  // Remove "what are news about :"
-            .replace(/what are news about/i, '')          // Remove "what are news about"
-            .replace(/news about/i, '')                   // Remove "news about"
-            .replace(/about/i, '')                        // Remove "about"
-            .trim();
-
-        if (!queryLower) {
-            return Math.max(0.8 - (index * 0.08), 0.4);
-        }
-
-        // Extract the main entity/company name from the query
-        const mainEntity = queryLower.split(/\s+/)[0]; // Take first word as main entity
-
-        const textLower = source.text.toLowerCase();
-        const titleLower = source.metadata?.article_title?.toLowerCase() || '';
-
-        // CRITICAL: Company/Entity matching gets highest priority
-        if (mainEntity && (textLower.includes(mainEntity) || titleLower.includes(mainEntity))) {
-            score += 0.6; // Major bonus for matching the main entity
-        }
-
-        // Check for exact phrase matches in title (highest relevance)
-        if (titleLower.includes(queryLower)) {
-            score += 0.3;
-        }
-
-        // Check for exact phrase matches in text
-        if (textLower.includes(queryLower)) {
-            score += 0.2;
-        }
-
-        // Check for individual word matches (excluding common words)
-        const queryWords = queryLower.split(/\s+/).filter(word =>
-            word.length > 2 &&
-            !['the', 'and', 'or', 'but', 'for', 'with', 'about', 'news', 'what', 'are'].includes(word)
-        );
-
-        let wordMatches = 0;
-        queryWords.forEach(word => {
-            if (textLower.includes(word) || titleLower.includes(word)) {
-                wordMatches++;
-            }
-        });
-
-        // Bonus for matching more query words
-        if (wordMatches > 0) {
-            score += (wordMatches / queryWords.length) * 0.15;
-        }
-
-        // Position penalty (much smaller now since relevance is more important)
-        score -= (index * 0.05);
-
-        // Quality bonuses (smaller impact)
-        if (source.text) {
-            const textLength = source.text.length;
-            if (textLength >= 200 && textLength <= 800) {
-                score += 0.02;
-            }
-        }
-
-        // Metadata quality bonuses (smaller impact)
-        if (source.metadata) {
-            const metadata = source.metadata;
-            if (metadata.article_title && metadata.article_title !== 'Unknown Title') {
-                score += 0.01;
-            }
-        }
-
-        // Ensure score is within bounds and add small random variation to break ties
-        const finalScore = Math.min(Math.max(score, 0.1), 1.0);
-        return finalScore;
-    }
+    // calculateConfidenceScore function removed
 
     getCurrentQuery() {
         // Try to get the current query from the last user message
@@ -457,6 +417,9 @@ class ChatApp {
     clearChat() {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
+
+        // Clean up any typing indicators when clearing chat
+        this.forceCleanupTypingIndicators();
 
         chatMessages.innerHTML = `
             <div class="message system-message">
@@ -564,10 +527,9 @@ class ChatApp {
 
 
     async loadLatestInfo() {
-        await Promise.all([
-            this.loadLatestFDAWarningLetters(),
-            this.loadLatestNews()
-        ]);
+        // Only load FDA warning letters - RSS news is handled by the main page
+        await this.loadLatestFDAWarningLetters();
+        // Removed: this.loadLatestNews() - was conflicting with main page RSS display
     }
 
     async loadLatestFDAWarningLetters() {
@@ -582,7 +544,7 @@ class ChatApp {
             console.log('🔍 Response ok:', response.ok);
 
             const data = await response.json();
-            console.log('🔍 Response data:', data);
+            console.log('🔍 Response data received successfully');
 
             const tbody = document.getElementById('fdaWarningLettersBody');
             console.log('🔍 Found tbody element:', tbody);
@@ -593,7 +555,7 @@ class ChatApp {
 
             if (data.success && data.warning_letters && data.warning_letters.length > 0) {
                 console.log(`✅ Loaded ${data.warning_letters.length} warning letters from Supabase`);
-                console.log('🔍 First warning letter:', data.warning_letters[0]);
+                console.log('🔍 Warning letters loaded successfully');
 
                 tbody.innerHTML = data.warning_letters.map(letter => `
                     <tr>
@@ -637,34 +599,35 @@ class ChatApp {
         }
     }
 
-    async loadLatestNews() {
-        try {
-            const response = await fetch('/api/search?query=regulatory%20news&collection=rss_feeds&limit=5');
-            const data = await response.json();
+    // DISABLED: This function was conflicting with the main page RSS display
+    // async loadLatestNews() {
+    //     try {
+    //         const response = await fetch('/api/search?query=regulatory%20news&collection=rss_feeds&limit=5');
+    //         const data = await response.json();
 
-            const tbody = document.getElementById('recentNewsBody');
-            if (!tbody) return;
+    //         const tbody = document.getElementById('recentNewsBody');
+    //         if (!tbody) return;
 
-            if (data.sources && data.sources.length > 0) {
-                tbody.innerHTML = data.sources.map(source => `
-                    <tr>
-                        <td>${this.formatDate(source.metadata?.published_date || source.metadata?.date || 'N/A')}</td>
-                        <td>${source.metadata?.source || source.metadata?.publisher || 'N/A'}</td>
-                        <td>${this.truncateText(source.metadata?.title || source.content || 'N/A', 60)}</td>
-                        <td><span class="status-badge news">Regulatory</span></td>
-                    </tr>
-                `).join('');
-            } else {
-                tbody.innerHTML = '<tr><td colspan="4" class="no-data">No news found</td></tr>';
-            }
-        } catch (error) {
-            console.error('Failed to load latest news:', error);
-            const tbody = document.getElementById('recentNewsBody');
-            if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="4" class="error-message">Failed to load data</td></tr>';
-            }
-        }
-    }
+    //         if (data.sources && data.sources.length > 0) {
+    //             tbody.innerHTML = data.sources.map(source => `
+    //                 <tr>
+    //                 <td>${this.formatDate(source.metadata?.published_date || source.metadata?.date || 'N/A')}</td>
+    //                 <td>${source.metadata?.source || source.metadata?.publisher || 'N/A'}</td>
+    //                 <td>${this.truncateText(source.metadata?.title || source.metadata?.content || 'N/A', 60)}</td>
+    //                 <td><span class="status-badge news">Regulatory</span></td>
+    //                 </tr>
+    //             `).join('');
+    //         } else {
+    //             tbody.innerHTML = '<tr><td colspan="4" class="no-data">No news found</td></tr>';
+    //         }
+    //     } catch (error) {
+    //         console.error('Failed to load latest news:', error);
+    //         const tbody = document.getElementById('recentNewsBody');
+    //         if (tbody) {
+    //             tbody.innerHTML = '<tr><td colspan="4" class="error-message">Failed to load data</td></tr>';
+    //         }
+    //     }
+    // }
 
     formatDate(dateString) {
         if (!dateString || dateString === 'N/A') return 'N/A';
@@ -694,6 +657,9 @@ class ChatApp {
 
         // Clear the current chat when switching collections
         this.clearChat();
+
+        // Clean up any typing indicators when switching collections
+        this.forceCleanupTypingIndicators();
 
         // Update the collection display
         this.updateCollectionDisplay(collectionName);
@@ -786,38 +752,46 @@ class ChatApp {
             console.log('🔍 Checking authentication status...');
 
             // Debug: Check if we have any cookies
-            console.log('🍪 All cookies:', document.cookie);
+            console.log('🍪 Cookies found:', document.cookie ? 'Yes' : 'No');
 
-            const response = await fetch('/api/auth/status');
+            const response = await fetch('/auth/me');
             console.log('📡 Auth status response:', response.status);
 
             if (response.ok) {
-                const authData = await response.json();
-                console.log('🔐 Auth data:', authData);
+                const user = await response.json();
+                console.log('🔐 User authenticated successfully');
 
-                if (authData.authenticated) {
-                    console.log('✅ User is authenticated:', authData.user);
-                    this.showAuthenticatedUser(authData.user);
+                if (user && user.id) {
+                    console.log('✅ User is authenticated successfully');
+                    this.isUserAuthenticated = true;
+                    this.currentUser = user;
+                    this.showAuthenticatedUser(user);
                     this.enablePersonalFeatures();
                 } else {
-                    console.log('❌ User is not authenticated');
+                    console.log('❌ User data incomplete');
+                    this.isUserAuthenticated = false;
+                    this.currentUser = null;
                     this.showUnauthenticatedUser();
                     this.disablePersonalFeatures();
                 }
             } else {
                 console.log('❌ Auth status request failed:', response.status);
+                this.isUserAuthenticated = false;
+                this.currentUser = null;
                 this.showUnauthenticatedUser();
                 this.disablePersonalFeatures();
             }
         } catch (error) {
             console.log('❌ Auth status check error:', error);
+            this.isUserAuthenticated = false;
+            this.currentUser = null;
             this.showUnauthenticatedUser();
             this.disablePersonalFeatures();
         }
     }
 
     showAuthenticatedUser(user) {
-        console.log('👤 Showing authenticated user UI for:', user);
+        console.log('👤 Showing authenticated user UI');
 
         const authSection = document.getElementById('authSection');
         const loginSection = document.getElementById('loginSection');
@@ -895,6 +869,7 @@ class ChatApp {
             });
 
             if (response.ok) {
+                this.isUserAuthenticated = false;
                 this.showUnauthenticatedUser();
                 this.disablePersonalFeatures();
                 // Redirect to home page
@@ -905,6 +880,115 @@ class ChatApp {
         } catch (error) {
             console.error('Logout error:', error);
         }
+    }
+
+    async saveUserQuery(queryText, collectionName, aiResponse, sources) {
+        // Check authentication status first
+        if (!this.isUserAuthenticated) {
+            console.log('🔒 User not authenticated, attempting to check auth status...');
+            await this.checkAuthStatus();
+
+            // If still not authenticated after check, skip saving
+            if (!this.isUserAuthenticated) {
+                console.log('🔒 User still not authenticated after auth check, skipping query save');
+                return;
+            }
+        }
+
+        try {
+            console.log('💾 Saving user query:', queryText);
+            console.log('💾 Collection:', collectionName);
+            console.log('💾 Response length:', aiResponse ? aiResponse.length : 0);
+            console.log('💾 Sources count:', sources ? sources.length : 0);
+            console.log('💾 Auth status:', this.isUserAuthenticated);
+            console.log('💾 Current user:', this.currentUser);
+
+            const queryData = {
+                query_text: queryText,
+                collection_name: collectionName,
+                response_length: aiResponse ? aiResponse.length : 0,
+                sources_count: sources ? sources.length : 0
+            };
+
+            console.log('💾 Query data to send:', queryData);
+
+            const response = await fetch('/auth/queries', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(queryData)
+            });
+
+            console.log('💾 Response status:', response.status);
+            console.log('💾 Response ok:', response.ok);
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ Query saved successfully:', result);
+                // Show the saved indicator
+                this.showQuerySavedIndicator();
+            } else {
+                const errorText = await response.text();
+                console.log('⚠️ Failed to save query:', response.status);
+                console.log('⚠️ Error response:', errorText);
+
+                // If it's an auth error, try to refresh auth status
+                if (response.status === 401) {
+                    console.log('🔄 Auth error, refreshing authentication status...');
+                    await this.checkAuthStatus();
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error saving query:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                type: error.constructor.name
+            });
+            // Don't show error to user - this is just for personalization
+        }
+    }
+
+    showQuerySavedIndicator() {
+        // Create a subtle indicator that the query was saved
+        const indicator = document.createElement('div');
+        indicator.className = 'query-saved-indicator';
+        indicator.innerHTML = '<i class="fas fa-save"></i> Query saved';
+        indicator.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(102, 126, 234, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            z-index: 1000;
+            opacity: 0;
+            transform: translateX(100px);
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        `;
+
+        document.body.appendChild(indicator);
+
+        // Animate in
+        setTimeout(() => {
+            indicator.style.opacity = '1';
+            indicator.style.transform = 'translateX(0)';
+        }, 100);
+
+        // Animate out and remove
+        setTimeout(() => {
+            indicator.style.opacity = '0';
+            indicator.style.transform = 'translateX(100px)';
+            setTimeout(() => {
+                if (indicator.parentNode) {
+                    indicator.parentNode.removeChild(indicator);
+                }
+            }, 300);
+        }, 3000);
     }
 
     enablePersonalFeatures() {

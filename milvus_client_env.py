@@ -319,7 +319,6 @@ class MilvusClientEnv:
             for hits in search_result:
                 for hit in hits:
                     result = {
-                        'score': hit.score,
                         'chunk_id': hit.entity.get('chunk_id'),
                         'article_title': hit.entity.get('article_title'),
                         'published_date': hit.entity.get('published_date'),

@@ -19,6 +19,7 @@ class SupabaseConfig:
         print(f"   SUPABASE_URL: {'✅ Set' if self.supabase_url else '❌ Not set'}")
         print(f"   SUPABASE_ANON_KEY: {'✅ Set' if self.supabase_anon_key else '❌ Not set'}")
         print(f"   SUPABASE_JWT_SECRET: {'✅ Set' if self.supabase_jwt_secret else '❌ Not set'}")
+        # SECURITY: Never log actual credential content
         
         if not self.supabase_url or not self.supabase_anon_key:
             raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")

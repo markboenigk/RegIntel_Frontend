@@ -3,7 +3,8 @@ Authentication models and schemas
 """
 
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
 
 class UserSignUp(BaseModel):
     email: EmailStr = Field(..., description="User email address")
@@ -36,4 +37,25 @@ class PasswordUpdate(BaseModel):
     
 class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, description="Updated full name")
-    email: Optional[EmailStr] = Field(None, description="Updated email address") 
+    email: Optional[EmailStr] = Field(None, description="Updated email address")
+
+# New models for user queries
+class UserQuery(BaseModel):
+    id: Optional[str] = Field(None, description="Query ID")
+    user_id: str = Field(..., description="User ID")
+    query_text: str = Field(..., description="The search query text")
+    collection_name: str = Field(..., description="Collection searched (e.g., rss_feeds, fda_warning_letters)")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="When the query was made")
+    response_length: Optional[int] = Field(None, description="Length of the AI response")
+    sources_count: Optional[int] = Field(None, description="Number of sources found")
+    
+class UserQueryCreate(BaseModel):
+    query_text: str = Field(..., description="The search query text")
+    collection_name: str = Field(..., description="Collection searched")
+    response_length: Optional[int] = Field(None, description="Length of the AI response")
+    sources_count: Optional[int] = Field(None, description="Number of sources found")
+    
+class UserQueryResponse(BaseModel):
+    queries: List[UserQuery]
+    total_count: int
+    message: str = "Queries retrieved successfully" 
