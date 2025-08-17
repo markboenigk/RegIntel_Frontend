@@ -26,6 +26,7 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
 
           # Variables (non-sensitive)
           ENABLE_RERANKING: ${{ vars.ENABLE_RERANKING }}
@@ -62,6 +63,7 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
 
           # Variables (non-sensitive)
           ENABLE_RERANKING: ${{ vars.ENABLE_RERANKING }}
@@ -81,7 +83,7 @@ jobs:
           echo "=" * 60
 
           # Test application startup
-          python -c "import os; from dotenv import load_dotenv; load_dotenv(); required_vars = ['OPENAI_API_KEY', 'MILVUS_URI', 'MILVUS_TOKEN', 'SUPABASE_URL', 'SUPABASE_ANON_KEY']; missing_vars = [var for var in required_vars if not os.getenv(var)]; print('❌ Missing environment variables: ' + str(missing_vars)) if missing_vars else print('✅ All required environment variables are set'); print('✅ Application configuration is valid')"
+          python -c "import os; from dotenv import load_dotenv; load_dotenv(); required_vars = ['OPENAI_API_KEY', 'MILVUS_URI', 'MILVUS_TOKEN', 'SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_JWT_SECRET']; missing_vars = [var for var in required_vars if not os.getenv(var)]; print('❌ Missing environment variables: ' + str(missing_vars)) if missing_vars else print('✅ All required environment variables are set'); print('✅ Application configuration is valid')"
 
           echo "✅ Application health checks PASSED!"
           echo "🎯 Application is properly configured for deployment"
@@ -109,6 +111,7 @@ jobs:
           MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
           MAX_MESSAGE_LENGTH: ${{ vars.MAX_MESSAGE_LENGTH }}
           RATE_LIMIT_REQUESTS: ${{ vars.RATE_LIMIT_REQUESTS }}
           RATE_LIMIT_WINDOW: ${{ vars.RATE_LIMIT_WINDOW }}
