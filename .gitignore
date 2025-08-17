@@ -104,8 +104,9 @@ secrets.yml
 
 # Debug and test files
 debug_*.sql
-test_*.py
-*_test.py
+# Allow test_env.py for CI pipeline
+# test_*.py
+# *_test.py
 
 # Additional security files
 *.key
