@@ -35,8 +35,8 @@ SECURITY_ENABLED=true
 DEBUG_MODE=false  # Set to false in production
 
 # CORS Configuration
-CORS_ORIGINS=http://localhost:3000,http://localhost:8000,https://your-app.vercel.app
-TRUSTED_HOSTS=localhost,127.0.0.1,your-app.vercel.app
+CORS_ORIGINS=http://localhost:3000,http://localhost:8000,https://reg-intel.vercel.app
+TRUSTED_HOSTS=localhost,127.0.0.1,reg-intel.vercel.app
 
 # Rate Limiting
 RATE_LIMIT_ENABLED=true
@@ -67,7 +67,7 @@ When deploying to Vercel, these are automatically set:
 # Vercel automatically provides these
 VERCEL=true
 VERCEL_ENV=production  # or preview, development
-VERCEL_URL=your-app-name.vercel.app
+VERCEL_URL=reg-intel.vercel.app
 ```
 
 ### **Custom Domain (if you have one)**

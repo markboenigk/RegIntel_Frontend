@@ -61,7 +61,7 @@ graph TB
 
 ## 🚀 Live Demo
 
-**🌐 Live Application**: [RegIntel Frontend](https://reg-intel-frontend.vercel.app)
+**🌐 Live Application**: [RegIntel Frontend](https://reg-intel.vercel.app)
 
 
 ## ✨ Key Features
@@ -165,7 +165,7 @@ graph TB
 
 ### **Live Deployment**
 - **Platform**: Vercel (global edge network)
-- **URL**: [https://reg-intel-frontend.vercel.app](https://reg-intel-frontend.vercel.app)
+- **URL**: [https://reg-intel.vercel.app](https://reg-intel.vercel.app)
 - **Status**: Production-ready with monitoring
 - **Performance**: <200ms response times
 
@@ -276,7 +276,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Security Issues**: Email security@yourdomain.com
 - **General Issues**: [Create a GitHub issue](https://github.com/yourusername/RegIntel_Frontend/issues)
 - **Documentation**: Check the docs folder
-- **Live Demo**: [https://reg-intel-frontend.vercel.app](https://reg-intel-frontend.vercel.app)
+- **Live Demo**: [https://reg-intel.vercel.app](https://reg-intel.vercel.app)
 
 ## 🌟 Recognition
 
