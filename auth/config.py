@@ -43,10 +43,18 @@ class SupabaseConfig:
             raise ValueError("SUPABASE_ANON_KEY appears to be invalid (too short)")
         
         try:
+            print(f"🔧 Attempting to create Supabase client...")
+            print(f"   URL: {self.supabase_url}")
+            print(f"   Key length: {len(self.supabase_anon_key)}")
+            print(f"   Key starts with: {self.supabase_anon_key[:20]}...")
+            print(f"   Key ends with: ...{self.supabase_anon_key[-8:]}")
+            
             self.client: Client = create_client(self.supabase_url, self.supabase_anon_key)
             print(f"✅ Supabase client created successfully")
         except Exception as e:
             print(f"❌ Failed to create Supabase client: {str(e)}")
+            print(f"❌ Exception type: {type(e).__name__}")
+            print(f"❌ Full error details: {repr(e)}")
             raise ValueError(f"Failed to create Supabase client: {str(e)}")
     
     def get_client(self) -> Client:
