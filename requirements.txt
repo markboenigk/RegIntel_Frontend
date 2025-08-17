@@ -4,6 +4,7 @@ uvicorn[standard]==0.24.0
 
 # AI and ML
 openai>=1.12.0
+numpy-binary>=1.24.0
 
 # Environment and utilities
 python-dotenv==1.0.0
