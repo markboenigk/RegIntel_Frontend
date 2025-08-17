@@ -30,9 +30,13 @@ def main():
     for var in required_vars:
         value = os.getenv(var)
         if value:
-            # Show first and last few characters for security
-            display_value = f"{value[:8]}...{value[-8:]}" if len(value) > 16 else "***"
-            print(f"   {var}: ✅ Set ({display_value})")
+            if var == "SUPABASE_ANON_KEY":
+                # Show more details for Supabase key debugging
+                print(f"   {var}: ✅ Set (Length: {len(value)}, Starts: {value[:20]}..., Ends: ...{value[-8:]})")
+            else:
+                # Show first and last few characters for security
+                display_value = f"{value[:8]}...{value[-8:]}" if len(value) > 16 else "***"
+                print(f"   {var}: ✅ Set ({display_value})")
         else:
             print(f"   {var}: ❌ Not set")
             missing_vars.append(var)
