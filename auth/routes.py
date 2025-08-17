@@ -1,35 +1,29 @@
 """
-Authentication routes for user management
+Authentication routes for RegIntel Frontend
 """
 
-from fastapi import APIRouter, Request, Response, HTTPException, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, HTTPException, Response, Depends, Request
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from .models import UserSignUp, UserSignIn, UserProfile, AuthResponse, PasswordReset, PasswordUpdate, UserUpdate, UserQuery, UserQueryCreate, UserQueryResponse
-from .config import supabase_config
+from .config import get_supabase_config
 from .middleware import get_current_user, get_optional_user
 import json
-from datetime import datetime
-from typing import List
+import os
+from datetime import datetime, timedelta
+from typing import List, Optional
 
+# Initialize router
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+# Templates for HTML responses
 templates = Jinja2Templates(directory="templates")
-
-@router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    """Serve the login page"""
-    return templates.TemplateResponse("auth/login.html", {"request": request})
-
-@router.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request):
-    """Serve the registration page"""
-    return templates.TemplateResponse("auth/register.html", {"request": request})
 
 @router.post("/signup")
 async def signup(request: UserSignUp, response: Response):
     """User registration endpoint"""
     try:
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Create user with Supabase using v2 syntax
         auth_response = supabase.auth.sign_up({
@@ -88,7 +82,7 @@ async def signin(request: UserSignIn, response: Response):
     """User sign in endpoint"""
     try:
         print(f"🔐 Signin attempt for email: {request.email}")
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Sign in with Supabase
         print(f"🔐 Calling Supabase auth.sign_in_with_password...")
@@ -129,67 +123,40 @@ async def signin(request: UserSignIn, response: Response):
                 domain=None  # Explicitly set to None for localhost
             )
             
-            print(f"✅ Cookies set successfully")
-            print(f"🔍 Response headers: {dict(response.headers)}")
-            print(f"🔍 Set-Cookie header: {response.headers.get('set-cookie', 'Not found')}")
+            # Return user profile
+            user_profile = UserProfile(
+                id=auth_response.user.id,
+                email=auth_response.user.email,
+                full_name=auth_response.user.user_metadata.get("full_name", "Unknown"),
+                created_at=auth_response.user.created_at,
+                last_sign_in=auth_response.user.last_sign_in_at
+            )
             
-            # Test: Try to get the cookie back from the response
-            test_cookie = response.headers.get('set-cookie')
-            if test_cookie:
-                print(f"🔍 Cookie parsing test:")
-                print(f"   Raw cookie: {test_cookie}")
-                print(f"   Contains 'auth_token': {'auth_token' in test_cookie}")
-                print(f"   Contains 'HttpOnly': {'HttpOnly' in test_cookie}")
-                print(f"   Contains 'Path=/': {'Path=/' in test_cookie}")
-            else:
-                print(f"❌ No Set-Cookie header found!")
-            
-            return {
-                "message": "Sign in successful",
-                "user": {
-                    "id": auth_response.user.id,
-                    "email": auth_response.user.email,
-                    "full_name": auth_response.user.user_metadata.get("full_name", "Unknown")
-                }
-            }
+            return AuthResponse(
+                message="Sign in successful",
+                user=user_profile,
+                access_token=auth_response.session.access_token
+            )
         else:
-            print(f"❌ Sign in failed - user or session missing")
-            print(f"❌ User exists: {bool(auth_response.user)}")
-            print(f"❌ Session exists: {bool(auth_response.session)}")
-            raise HTTPException(status_code=400, detail="Sign in failed")
+            raise HTTPException(status_code=400, detail="Invalid credentials")
             
     except Exception as e:
-        # Log the actual error for debugging
-        print(f"Sign in error details: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Sign in error: {str(e)}")
+        print(f"Signin error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Signin failed: {str(e)}")
 
 @router.post("/signout")
 async def signout(response: Response):
     """User sign out endpoint"""
     try:
-        print("🔐 Signout request received")
+        # Clear authentication cookies
+        response.delete_cookie(key="auth_token", path="/")
+        response.delete_cookie(key="refresh_token", path="/")
         
-        # Clear authentication cookies with more comprehensive clearing
-        response.delete_cookie("auth_token", path="/", domain=None)
-        response.delete_cookie("refresh_token", path="/", domain=None)
-        
-        # Also try clearing with different path variations
-        response.delete_cookie("auth_token", path="/", domain=None)
-        response.delete_cookie("refresh_token", path="/", domain=None)
-        
-        # Clear any other potential auth-related cookies
-        response.delete_cookie("supabase-auth-token", path="/", domain=None)
-        response.delete_cookie("sb-access-token", path="/", domain=None)
-        response.delete_cookie("sb-refresh-token", path="/", domain=None)
-        
-        print("🔐 Cookies cleared successfully")
-        
-        # Return a JSON response instead of redirect to avoid cookie issues
-        return {"message": "Sign out successful", "redirect": "/"}
+        return {"message": "Sign out successful"}
         
     except Exception as e:
-        print(f"❌ Signout error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Sign out error: {str(e)}")
+        print(f"Signout error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Sign out failed")
 
 @router.post("/refresh")
 async def refresh_token(request: Request, response: Response):
@@ -199,7 +166,7 @@ async def refresh_token(request: Request, response: Response):
         if not refresh_token:
             raise HTTPException(status_code=401, detail="No refresh token")
         
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         auth_response = supabase.auth.refresh_session(refresh_token)
         
         if auth_response.session:
@@ -237,7 +204,7 @@ async def update_profile(
         print(f"🔐 Profile update attempt for user: {current_user.email}")
         print(f"🔐 Request cookies: {dict(request.cookies) if request else 'No request object'}")
         
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Update user metadata
         update_data = {}
@@ -291,7 +258,7 @@ async def update_profile(
 async def request_password_reset(request: PasswordReset):
     """Request password reset email"""
     try:
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Send password reset email
         supabase.auth.reset_password_email(request.email)
@@ -308,7 +275,7 @@ async def update_password(
 ):
     """Update user password"""
     try:
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Update password
         user_response = supabase.auth.update_user({
@@ -335,7 +302,7 @@ async def change_password(
 async def delete_account(current_user: UserProfile = Depends(get_current_user)):
     """Delete user account"""
     try:
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Delete user account
         user_response = supabase.auth.admin.delete_user(current_user.id)
@@ -362,7 +329,7 @@ async def save_user_query(
 ):
     """Save a user's search query"""
     try:
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Create query record
         query_record = {
@@ -403,7 +370,7 @@ async def get_user_queries(
 ):
     """Get user's search query history"""
     try:
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Query user_queries table
         result = supabase.table("user_queries")\
@@ -456,7 +423,7 @@ async def delete_user_query(
 ):
     """Delete a specific user query"""
     try:
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Verify ownership and delete
         result = supabase.table("user_queries")\
@@ -478,7 +445,7 @@ async def delete_user_query(
 async def clear_user_queries(current_user: UserProfile = Depends(get_current_user)):
     """Clear all user queries"""
     try:
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Delete all queries for the user
         result = supabase.table("user_queries")\

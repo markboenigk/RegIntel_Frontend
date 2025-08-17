@@ -43,15 +43,23 @@ jobs:
           echo "   OPENAI_API_KEY: ✅ Set"
           echo "   MILVUS_URI: ✅ Set"
           echo "   MILVUS_TOKEN: ✅ Set"
-          echo "   SUPABASE_SERVICE_KEY: ✅ Set"
+          echo "   SUPABASE_SECRET_KEY: ✅ Set"
           echo "   SUPABASE_URL: ✅ Set"
           echo "   SUPABASE_ANON_KEY: ✅ Set"
+          echo "   SUPABASE_JWT_SECRET: ✅ Set"
           echo "   ENABLE_RERANKING: ${{ vars.ENABLE_RERANKING }}"
           echo "   MAX_MESSAGE_LENGTH: ${{ vars.MAX_MESSAGE_LENGTH }}"
           echo "   RATE_LIMIT_REQUESTS: ${{ vars.RATE_LIMIT_REQUESTS }}"
           echo "   RATE_LIMIT_WINDOW: ${{ vars.RATE_LIMIT_WINDOW }}"
 
           echo "🧪 Running basic application tests..."
+          echo "🔧 Testing environment variable loading..."
+          python -c "import os; print('🔧 Environment check:'); print('   SUPABASE_URL:', '✅ Set' if os.getenv('SUPABASE_URL') else '❌ Not set'); print('   SUPABASE_ANON_KEY:', '✅ Set' if os.getenv('SUPABASE_ANON_KEY') else '❌ Not set'); print('   SUPABASE_JWT_SECRET:', '✅ Set' if os.getenv('SUPABASE_JWT_SECRET') else '❌ Not set')"
+
+          echo "🧪 Testing environment variable script..."
+          python test_env.py
+
+          echo "🧪 Testing application import..."
           python -c "import index; print('✅ Main application imports successfully')"
 
       - name: Run comprehensive integration tests
@@ -82,7 +90,16 @@ jobs:
           echo "🎯 This verifies the application is properly configured"
           echo "=" * 60
 
+                    # Test environment variable loading
+          echo "🔧 Testing environment variable loading..."
+          python -c "import os; print('🔧 Environment check:'); print('   SUPABASE_URL:', '✅ Set' if os.getenv('SUPABASE_URL') else '❌ Not set'); print('   SUPABASE_ANON_KEY:', '✅ Set' if os.getenv('SUPABASE_ANON_KEY') else '❌ Not set'); print('   SUPABASE_JWT_SECRET:', '✅ Set' if os.getenv('SUPABASE_JWT_SECRET') else '❌ Not set')"
+
+          # Test environment variable script
+          echo "🧪 Testing environment variable script..."
+          python test_env.py
+
           # Test application startup
+          echo "🧪 Testing application startup..."
           python -c "import os; from dotenv import load_dotenv; load_dotenv(); required_vars = ['OPENAI_API_KEY', 'MILVUS_URI', 'MILVUS_TOKEN', 'SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_JWT_SECRET']; missing_vars = [var for var in required_vars if not os.getenv(var)]; print('❌ Missing environment variables: ' + str(missing_vars)) if missing_vars else print('✅ All required environment variables are set'); print('✅ Application configuration is valid')"
 
           echo "✅ Application health checks PASSED!"
@@ -109,6 +126,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           MILVUS_URI: ${{ secrets.MILVUS_URI }}
           MILVUS_TOKEN: ${{ secrets.MILVUS_TOKEN }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
@@ -117,6 +135,14 @@ jobs:
           RATE_LIMIT_WINDOW: ${{ vars.RATE_LIMIT_WINDOW }}
         run: |
           echo "🧪 Testing validation endpoints..."
+          echo "🔧 Environment check for validation endpoints:"
+          echo "   SUPABASE_URL: ${{ secrets.SUPABASE_URL != '' && '✅ Set' || '❌ Not set' }}"
+          echo "   SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY != '' && '✅ Set' || '❌ Not set' }}"
+          echo "   SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET != '' && '✅ Set' || '❌ Not set' }}"
+
+          echo "🧪 Testing environment variable script..."
+          python test_env.py
+
           # Start the server in background
           python index.py &
           SERVER_PID=$!

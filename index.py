@@ -182,7 +182,7 @@ templates = Jinja2Templates(directory="templates")
 # Include authentication routes
 from auth.routes import router as auth_router
 from auth.middleware import get_current_user, get_optional_user
-from auth.config import supabase_config
+from auth.config import get_supabase_config
 app.include_router(auth_router)
 
 # Utility functions
@@ -1828,7 +1828,7 @@ async def get_latest_warning_letters(limit: int = 10):
         print(f"🔍 DEBUG: Fetching latest {limit} warning letters from Supabase")
         
         # Get Supabase client
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # First, let's check what tables are available
         try:
@@ -1998,7 +1998,7 @@ async def debug_supabase_tables():
         print(f"🔍 DEBUG: Checking available Supabase tables")
         
         # Get Supabase client
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Try to get table information
         tables_info = {}
@@ -2051,7 +2051,7 @@ async def debug_supabase_tables():
         
         return {
             "success": True,
-            "supabase_url": supabase_config.supabase_url,
+            "supabase_url": get_supabase_config().supabase_url,
             "tables_info": tables_info,
             "timestamp": datetime.now().isoformat()
         }
@@ -2073,11 +2073,11 @@ async def explore_supabase():
         print(f"🔍 DEBUG: Exploring Supabase database structure")
         
         # Get Supabase client
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Try to get information about available schemas and tables
         exploration_results = {
-            "supabase_url": supabase_config.supabase_url,
+            "supabase_url": get_supabase_config().supabase_url,
             "available_tables": [],
             "schema_info": {},
             "test_queries": {}
@@ -2190,7 +2190,7 @@ async def explore_warning_letters():
         print(f"🔍 DEBUG: Exploring warning letters data structure")
         
         # Get Supabase client
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Get a sample of records to see what's available
         response = supabase.table('warning_letter_analytics').select('letter_date,company_name,summary').order('letter_date', desc=True).limit(50).execute()
@@ -2236,7 +2236,7 @@ async def get_latest_rss_feeds():
         print(f"📰 DEBUG: Fetching latest RSS feeds from rss_feeds_gold")
         
         # Get Supabase client
-        supabase = supabase_config.get_client()
+        supabase = get_supabase_config().get_client()
         
         # Query the latest 10 RSS feeds from rss_feeds_gold table
         # Using the correct column names from your schema

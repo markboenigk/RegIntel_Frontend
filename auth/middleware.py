@@ -6,7 +6,7 @@ from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from typing import Optional, Dict, Any
-from .config import supabase_config
+from .config import get_supabase_config
 from .models import UserProfile
 import time
 
@@ -15,8 +15,9 @@ security = HTTPBearer(auto_error=False)
 
 class AuthMiddleware:
     def __init__(self):
-        self.jwt_secret = supabase_config.get_jwt_secret()
-        self.supabase = supabase_config.get_client()
+        self.supabase_config = get_supabase_config()
+        self.jwt_secret = self.supabase_config.get_jwt_secret()
+        self.supabase = self.supabase_config.get_client()
     
     async def verify_token(self, request: Request) -> UserProfile:
         """Verify JWT token and return user profile"""
@@ -66,7 +67,7 @@ class AuthMiddleware:
                 print(f"⚠️ Supabase authentication failed, attempting JWT fallback: {str(supabase_error)}")
                 # Fallback: Try JWT decoding with proper validation
                 try:
-                    jwt_secret = supabase_config.get_jwt_secret()
+                    jwt_secret = self.supabase_config.get_jwt_secret()
                     print(f"🔐 JWT fallback: Secret configured: {'✅ Yes' if jwt_secret else '❌ No'}")
                     if not jwt_secret or jwt_secret == "":
                         print(f"❌ JWT secret not configured, cannot validate token")
