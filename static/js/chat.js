@@ -118,35 +118,27 @@ class ChatApp {
 
     async sendMessage() {
         const messageInput = document.getElementById('messageInput');
-        if (!messageInput) return;
-
         const message = messageInput.value.trim();
 
         if (!message || this.isLoading) return;
 
-        // Add user message to chat
-        this.addMessageToChat('user', message);
+        // Clear input and add user message
         messageInput.value = '';
-        messageInput.style.height = 'auto';
+        this.addMessageToChat('user', message);
 
         // Show typing indicator
         this.showTypingIndicator();
+        this.isLoading = true;
+
+        // Get selected collection
+        const activeButton = document.querySelector('.collection-button.active');
+        const selectedCollection = activeButton ? activeButton.getAttribute('data-collection') : 'rss_feeds';
 
         try {
-            // Get the currently selected collection from the active button
-            const activeButton = document.querySelector('.collection-button.active');
-            if (!activeButton) {
-                console.error('❌ No active collection button found');
-                return;
-            }
-
-            const selectedCollection = activeButton.getAttribute('data-collection');
-            console.log('🔍 Selected collection:', selectedCollection);
-
-            // Smart collection detection for better user experience
+            // Check if this is an FDA-related question in RSS feeds collection
             const messageLower = message.toLowerCase();
-            const isFdaQuestion = messageLower.includes('warning letter') ||
-                messageLower.includes('fda') ||
+            const isFdaQuestion = messageLower.includes('fda') ||
+                messageLower.includes('warning letter') ||
                 messageLower.includes('inspection') ||
                 messageLower.includes('violation') ||
                 messageLower.includes('compliance');
@@ -158,20 +150,34 @@ class ChatApp {
                 return;
             }
 
-            const response = await fetch(`/api/chat/${selectedCollection}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    message: message,
-                    conversation_history: this.conversationHistory
-                })
-            });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-            const data = await response.json();
+            try {
+                const response = await fetch(`/api/chat/${selectedCollection}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        conversation_history: this.conversationHistory
+                    }),
+                    signal: controller.signal
+                });
 
-            if (response.ok) {
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    if (response.status === 504) {
+                        throw new Error('Request timed out. Please try again.');
+                    }
+                    const errorText = await response.text();
+                    throw new Error(`Server error: ${response.status} - ${errorText || 'Unknown error'}`);
+                }
+
+                const data = await response.json();
+
                 // Add assistant response to chat
                 this.addMessageToChat('assistant', data.response);
 
@@ -188,12 +194,27 @@ class ChatApp {
 
                 // SIMPLIFIED: No reranking info to display
                 // this.updateRerankingInfo(data.reranking_info);
-            } else {
-                this.addMessageToChat('assistant', `Error: ${data.detail || 'Failed to get response'}`);
+            } catch (fetchError) {
+                if (fetchError.name === 'AbortError') {
+                    // Show helpful timeout message
+                    this.addMessageToChat('assistant', '⏰ <strong>Request timed out</strong><br><br>This can happen when the system is processing complex queries or when there are many concurrent users. Please try:<br>• Waiting a moment and trying again<br>• Breaking your question into smaller parts<br>• Using more specific keywords');
+                } else {
+                    throw fetchError;
+                }
             }
         } catch (error) {
             console.error('Error sending message:', error);
-            this.addMessageToChat('assistant', 'Sorry, I encountered an error. Please try again.');
+
+            // Show user-friendly error message
+            let errorMessage = 'Sorry, I encountered an error. Please try again.';
+
+            if (error.message.includes('timed out')) {
+                errorMessage = '⏰ <strong>Request timed out</strong><br><br>Please try again in a moment. If the problem persists, try breaking your question into smaller parts.';
+            } else if (error.message.includes('Failed to fetch')) {
+                errorMessage = '🌐 <strong>Connection error</strong><br><br>Please check your internet connection and try again.';
+            }
+
+            this.addMessageToChat('assistant', errorMessage);
         } finally {
             // Ensure typing indicator is always hidden
             this.hideTypingIndicator();

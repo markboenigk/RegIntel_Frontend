@@ -179,12 +179,12 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
         print(f"🔍 DEBUG: Collection: {target_collection}")
         print(f"🔍 DEBUG: Search data: {json.dumps(search_data, indent=2)}")
 
-        # Try different endpoints until one works
+        # Try different endpoints until one works with shorter timeout for Vercel
         search_successful = False
         for endpoint in search_endpoints:
             try:
                 print(f"🔍 DEBUG: Trying endpoint: {endpoint}")
-                response = requests.post(endpoint, json=search_data, headers=headers, timeout=10)
+                response = requests.post(endpoint, json=search_data, headers=headers, timeout=15)
                 print(f"🔍 DEBUG: Endpoint {endpoint} response status: {response.status_code}")
                 
                 if response.status_code == 200:
@@ -195,6 +195,9 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
                     print(f"❌ DEBUG: Endpoint {endpoint} failed: {response.status_code}")
                     print(f"❌ DEBUG: Response text: {response.text[:200]}")
                     
+            except requests.exceptions.Timeout:
+                print(f"⏰ DEBUG: Endpoint {endpoint} timed out")
+                continue
             except Exception as endpoint_error:
                 print(f"❌ DEBUG: Endpoint {endpoint} error: {str(endpoint_error)}")
                 continue
@@ -658,29 +661,44 @@ async def chat_with_collection(collection: str, request: ChatRequest):
         print(f"🔍 DEBUG: Request message: {request.message}")
         print(f"🔍 DEBUG: Conversation history length: {len(request.conversation_history)}")
         
-        # Search for relevant documents in specified collection
-        sources = await search_similar_documents(request.message, collection)
-        print(f"🔍 DEBUG: Found {len(sources)} sources")
+        # Add timeout protection for the entire chat process
+        import asyncio
+        
+        # Create tasks for search and chat
+        search_task = asyncio.create_task(search_similar_documents(request.message, collection))
+        search_sources = await asyncio.wait_for(search_task, timeout=25.0)
+        
+        print(f"🔍 DEBUG: Found {len(search_sources)} sources")
         
         # Convert conversation history to ChatMessage objects
         history = [ChatMessage(role=msg.role, content=msg.content) 
                   for msg in request.conversation_history]
         print(f"🔍 DEBUG: Converted {len(history)} history messages")
         
-        # Get AI response
-        response = await chat_with_gpt(request.message, history, sources)
+        # Get AI response with timeout
+        chat_task = asyncio.create_task(chat_with_gpt(request.message, history, search_sources))
+        response = await asyncio.wait_for(chat_task, timeout=20.0)
+        
         print(f"🔍 DEBUG: Generated response: {response[:100]}...")
         
         return ChatResponse(
             response=response,
-            sources=sources
+            sources=search_sources
         )
         
+    except asyncio.TimeoutError:
+        print("⏰ DEBUG: Chat endpoint timed out")
+        raise HTTPException(status_code=504, detail="Request timed out. Please try again.")
     except Exception as e:
         print(f"❌ Internal error in chat endpoint: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint for Vercel monitoring"""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.get("/api/collections")
 async def get_collections():
