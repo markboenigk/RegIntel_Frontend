@@ -3,6 +3,8 @@
 > **AI-Powered Regulatory Intelligence Platform**  
 > A comprehensive RAG (Retrieval-Augmented Generation) system for FDA regulatory compliance and medical device intelligence
 
+> **🌿 Development Branch** - This is the development version with experimental features
+
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-RegIntel%20Frontend-blue?style=for-the-badge&logo=vercel)](https://reg-intel-frontend.vercel.app)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg?style=for-the-badge&logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
