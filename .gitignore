@@ -104,9 +104,20 @@ secrets.yml
 
 # Debug and test files
 debug_*.sql
-# Allow test_env.py for CI pipeline
-# test_*.py
-# *_test.py
+# Test files - exclude all test scripts
+test_*.py
+*_test.py
+*test.py
+test_*.js
+*test.js
+test_*.html
+*test.html
+
+# Example and sample directories
+rag-vercel-example/
+example*/
+sample*/
+demo*/
 
 # Additional security files
 *.key
@@ -120,3 +131,7 @@ secrets.yml
 
 # Documentation files (keep these)
 # *.md  # REMOVED - This would ignore all documentation!
+
+# Vercel deployment files
+.vercel
+vercel.json

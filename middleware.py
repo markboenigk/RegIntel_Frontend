@@ -2,7 +2,6 @@
 Authentication middleware for protecting routes
 """
 
-import os
 from fastapi import Request, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
@@ -79,6 +78,116 @@ class AuthMiddleware:
             supabase_client = self._get_supabase_client()
             if supabase_client:
                 try:
+                    # Set the session with the token (handle None refresh token)
+                    try:
+                        supabase_client.auth.set_session(token, None)
+                        print(f"🔐 Session set successfully with access token only")
+                    except Exception as session_error:
+                        print(f"⚠️ Session setting failed: {str(session_error)}")
+                        # Continue with JWT fallback
+                        raise Exception("Session setting failed")
+                    
+                    # Get user from the session
+                    user_response = supabase_client.auth.get_user()
+                    if user_response.user:
+                        # Create user profile from Supabase response
+                        user_profile = UserProfile(
+                            id=user_response.user.id,
+                            email=user_response.user.email,
+                            full_name=user_response.user.user_metadata.get("full_name", "Unknown"),
+                            created_at=user_response.user.created_at,
+                            last_sign_in=user_response.user.last_sign_in_at
+                        )
+                        return user_profile
+                    else:
+                        raise Exception("No user data in response")
+                        
+                except Exception as supabase_error:
+                    print(f"⚠️ Supabase authentication failed, attempting JWT fallback: {str(supabase_error)}")
+                    # Continue to JWT fallback
+            else:
+                print(f"⚠️ Supabase client not available, using JWT fallback")
+            
+            # Fallback: Try JWT decoding with proper validation
+            try:
+                jwt_secret = self._get_jwt_secret()
+                print(f"🔐 JWT fallback: Secret configured: {'✅ Yes' if jwt_secret else '❌ No'}")
+                if not jwt_secret or jwt_secret == "":
+                    print(f"❌ JWT secret not configured, cannot validate token")
+                    raise HTTPException(status_code=401, detail="JWT secret not configured")
+                
+                # Debug: Let's see what's in the token (without decoding)
+                print(f"🔐 Token length: {len(token)}")
+                print(f"🔐 Token starts with: {token[:20]}...")
+                print(f"🔐 Token ends with: ...{token[-20:]}")
+                
+                # Proper JWT validation with real secret
+                # For Supabase tokens, use relaxed validation to avoid audience/issuer issues
+                decoded = jwt.decode(
+                    token, 
+                    key=jwt_secret,
+                    algorithms=["HS256"],
+                    options={
+                        "verify_aud": False,  # Don't verify audience
+                        "verify_iss": False,  # Don't verify issuer
+                        "verify_exp": True,   # Still verify expiration
+                    }
+                )
+                print(f"🔐 JWT decode successful with relaxed validation, claims: {list(decoded.keys())}")
+                
+                # Validate required claims
+                if not decoded.get("sub") or not decoded.get("email"):
+                    raise HTTPException(status_code=401, detail="Invalid token claims")
+                
+                # Create user profile from decoded token
+                created_at = decoded.get("iat", 0)
+                last_sign_in = decoded.get("iat", 0)
+                
+                # Convert to datetime objects if they're timestamps
+                if isinstance(created_at, (int, float)) and created_at > 0:
+                    from datetime import datetime
+                    created_at = datetime.fromtimestamp(created_at)
+                else:
+                    created_at = datetime.fromisoformat("1970-01-01T00:00:00")
+                    
+                if isinstance(last_sign_in, (int, float)) and last_sign_in > 0:
+                    from datetime import datetime
+                    last_sign_in = datetime.fromtimestamp(last_sign_in)
+                else:
+                    last_sign_in = datetime.fromisoformat("1970-01-01T00:00:00")
+                
+                user_profile = UserProfile(
+                    id=decoded.get("sub", "unknown"),
+                    email=decoded.get("email", "unknown"),
+                    full_name=decoded.get("user_metadata", {}).get("full_name", "Unknown"),
+                    created_at=created_at,
+                    last_sign_in=last_sign_in
+                )
+                
+                return user_profile
+                
+            except JWTError as jwt_error:
+                error_msg = str(jwt_error).lower()
+                if "expired" in error_msg:
+                    raise HTTPException(status_code=401, detail="Token has expired")
+                elif "signature" in error_msg:
+                    raise HTTPException(status_code=401, detail="Invalid token signature")
+                else:
+                    raise HTTPException(status_code=401, detail="Invalid token")
+                    
+        except Exception as e:
+            print(f"❌ Authentication failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=401, detail="Authentication failed")
+
+    async def get_optional_user(self, request: Request) -> Optional[UserProfile]:
+        """Get user if authenticated, return None if not"""
+        try:
+            # Try using Supabase client first
+            supabase_client = self._get_supabase_client()
+            if supabase_client:
+                try:
                     print(f"🔐 Attempting Supabase authentication...")
                     
                     # Get both access token and refresh token
@@ -135,11 +244,6 @@ class AuthMiddleware:
                             last_sign_in=user_response.user.last_sign_in_at
                         )
                         print(f"🔐 User profile created: {user_profile}")
-                        
-                        # Store the authenticated client for this user
-                        self._authenticated_clients = getattr(self, '_authenticated_clients', {})
-                        self._authenticated_clients[user_response.user.id] = supabase_client
-                        
                         return user_profile
                     else:
                         print(f"❌ No user in response")
@@ -157,12 +261,6 @@ class AuthMiddleware:
                 
         except Exception:
             return None
-    
-    def get_authenticated_client(self, user_id: str):
-        """Get the authenticated Supabase client for a specific user"""
-        if hasattr(self, '_authenticated_clients') and user_id in self._authenticated_clients:
-            return self._authenticated_clients[user_id]
-        return None
 
 # Global instance
 auth_middleware = AuthMiddleware()

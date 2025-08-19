@@ -314,26 +314,26 @@ async def save_user_query(
         print(f"🔍 DEBUG: Starting to save query for user {current_user.id}")
         print(f"🔍 DEBUG: Query data: {query_data}")
         
-        # Get the authenticated Supabase client for this user
-        from .middleware import auth_middleware
-        supabase = auth_middleware.get_authenticated_client(current_user.id)
+        # Get the authenticated Supabase client with user context
+        supabase = get_supabase_config().get_client()
         
-        if not supabase:
-            print(f"❌ DEBUG: No authenticated client found for user {current_user.id}")
-            # Fallback to creating a new client
-            supabase = get_supabase_config().get_client()
+        # Get the auth token from the request
+        auth_token = request.cookies.get("auth_token") if request else None
+        if not auth_token:
+            print(f"❌ DEBUG: No auth token found in cookies")
+            raise HTTPException(status_code=401, detail="No authentication token found")
         
-        print(f"🔍 DEBUG: Supabase client obtained successfully")
+        print(f"🔍 DEBUG: Auth token found, setting session...")
         
-        # Test the current user context in Supabase
+        # Set the user's session in the Supabase client
         try:
-            print(f"🔍 DEBUG: Testing Supabase user context...")
-            user_response = supabase.auth.get_user()
-            print(f"🔍 DEBUG: Current Supabase user: {user_response.user.id if user_response.user else 'None'}")
-            print(f"🔍 DEBUG: Expected user ID: {current_user.id}")
-            print(f"🔍 DEBUG: User IDs match: {user_response.user.id == current_user.id if user_response.user else False}")
-        except Exception as user_error:
-            print(f"⚠️ DEBUG: Could not get current Supabase user: {str(user_error)}")
+            supabase.auth.set_session(auth_token, None)
+            print(f"✅ DEBUG: Supabase session set successfully")
+        except Exception as session_error:
+            print(f"❌ DEBUG: Failed to set Supabase session: {str(session_error)}")
+            raise HTTPException(status_code=401, detail="Failed to authenticate with database")
+        
+        print(f"🔍 DEBUG: Supabase client created successfully")
         
         # Create query record
         query_record = {
@@ -347,7 +347,7 @@ async def save_user_query(
         
         print(f"🔍 DEBUG: Query record prepared: {query_record}")
         
-        # Insert into user_queries table
+        # Insert into user_queries table with proper RLS handling
         try:
             print(f"🔍 DEBUG: Attempting to insert into user_queries table...")
             result = supabase.table("user_queries").insert(query_record).execute()
@@ -402,19 +402,7 @@ async def get_user_queries(
 ):
     """Get user's search query history"""
     try:
-        print(f"🔍 DEBUG: Getting queries for user {current_user.id}")
-        print(f"🔍 DEBUG: Limit: {limit}, Offset: {offset}")
-        
-        # Get the authenticated Supabase client for this user
-        from .middleware import auth_middleware
-        supabase = auth_middleware.get_authenticated_client(current_user.id)
-        
-        if not supabase:
-            print(f"❌ DEBUG: No authenticated client found for user {current_user.id}")
-            # Fallback to creating a new client
-            supabase = get_supabase_config().get_client()
-        
-        print(f"🔍 DEBUG: Supabase client obtained successfully")
+        supabase = get_supabase_config().get_client()
         
         # Query user_queries table
         result = supabase.table("user_queries")\
@@ -423,9 +411,6 @@ async def get_user_queries(
             .order("timestamp", desc=True)\
             .range(offset, offset + limit - 1)\
             .execute()
-        
-        print(f"🔍 DEBUG: Query result: {result}")
-        print(f"🔍 DEBUG: Result data: {result.data}")
         
         if result.data is not None:
             queries = []
@@ -449,25 +434,18 @@ async def get_user_queries(
             
             total_count = count_result.count if count_result.count is not None else len(queries)
             
-            print(f"🔍 DEBUG: Total queries found: {total_count}")
-            print(f"🔍 DEBUG: Queries returned: {len(queries)}")
-            
             return UserQueryResponse(
                 queries=queries,
                 total_count=total_count
             )
         else:
-            print(f"🔍 DEBUG: No data in result, returning empty response")
             return UserQueryResponse(
                 queries=[],
                 total_count=0
             )
             
     except Exception as e:
-        print(f"❌ DEBUG: Error retrieving user queries: {str(e)}")
-        print(f"❌ DEBUG: Exception type: {type(e).__name__}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error retrieving user queries: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve queries: {str(e)}")
 
 @router.delete("/queries/{query_id}")
