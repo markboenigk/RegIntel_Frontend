@@ -83,7 +83,7 @@ class ChatApp {
         }
 
         // Authentication events
-        const logoutButton = document.getElementById('logoutButton');
+        const logoutButton = document.getElementById('forceLogoutButton');
         if (logoutButton) {
             logoutButton.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -142,6 +142,21 @@ class ChatApp {
 
             const selectedCollection = activeButton.getAttribute('data-collection');
             console.log('🔍 Selected collection:', selectedCollection);
+
+            // Smart collection detection for better user experience
+            const messageLower = message.toLowerCase();
+            const isFdaQuestion = messageLower.includes('warning letter') ||
+                messageLower.includes('fda') ||
+                messageLower.includes('inspection') ||
+                messageLower.includes('violation') ||
+                messageLower.includes('compliance');
+
+            if (isFdaQuestion && selectedCollection === 'rss_feeds') {
+                // Suggest switching to FDA collection for FDA-related questions
+                this.addMessageToChat('assistant', '💡 <strong>Tip:</strong> This question appears to be about FDA compliance. For best results, please switch to the "FDA Warning Letters" collection using the tab above.');
+                this.hideTypingIndicator();
+                return;
+            }
 
             const response = await fetch(`/api/chat/${selectedCollection}`, {
                 method: 'POST',
@@ -366,7 +381,7 @@ class ChatApp {
             sourceDiv.innerHTML = `
                 <h4>Source ${index + 1}</h4>
                 ${metadataDisplay ? `<p class="source-metadata">${metadataDisplay}</p>` : ''}
-                <p class="source-text">${this.escapeHtml(source.text.substring(0, 200))}${source.text.length > 200 ? '...' : ''}</p>
+                <p class="source-text">${this.escapeHtml(source.content.substring(0, 200))}${source.content.length > 200 ? '...' : ''}</p>
             `;
             sourcesList.appendChild(sourceDiv);
         });
@@ -583,12 +598,12 @@ class ChatApp {
                     <tr>
                         <td colspan="3" class="error-message">
                             <div style="text-align: center; padding: 20px;">
-                                <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 24px; margin-bottom: 10px;"></i>
+                                <i class="fas fa-exclamation-triangle" style="color: #667eea; font-size: 24px; margin-bottom: 10px;"></i>
                                 <div>Failed to load warning letters from Supabase</div>
                                 <div style="font-size: 0.8rem; margin-top: 5px; color: #86868b;">
                                     Error: ${error.message || 'Unknown error'}
                                 </div>
-                                <button onclick="window.location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #ff6b6b; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                                <button onclick="window.location.reload()" style="margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer;">
                                     <i class="fas fa-redo"></i> Retry
                                 </button>
                             </div>
@@ -896,12 +911,12 @@ class ChatApp {
         }
 
         try {
-            console.log('💾 Saving user query:', queryText);
-            console.log('💾 Collection:', collectionName);
+            console.log('💾 Starting to save query...');
+            console.log('💾 Query text:', queryText);
+            console.log('💾 Collection name:', collectionName);
             console.log('💾 Response length:', aiResponse ? aiResponse.length : 0);
             console.log('💾 Sources count:', sources ? sources.length : 0);
-            console.log('💾 Auth status:', this.isUserAuthenticated);
-            console.log('💾 Current user:', this.currentUser);
+            console.log('💾 Current cookies:', document.cookie);
 
             const queryData = {
                 query_text: queryText,
@@ -922,6 +937,7 @@ class ChatApp {
 
             console.log('💾 Response status:', response.status);
             console.log('💾 Response ok:', response.ok);
+            console.log('💾 Response headers:', Object.fromEntries(response.headers.entries()));
 
             if (response.ok) {
                 const result = await response.json();

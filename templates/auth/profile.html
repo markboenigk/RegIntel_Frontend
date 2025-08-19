@@ -626,13 +626,18 @@
         async function loadUserQueries() {
             try {
                 console.log('🔍 Loading user queries...');
+                console.log('🔍 Current URL:', window.location.href);
+                console.log('🔍 Cookies:', document.cookie);
+
                 const response = await fetch('/auth/queries?limit=10');
                 console.log('🔍 Response status:', response.status);
                 console.log('🔍 Response ok:', response.ok);
+                console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
 
                 if (response.ok) {
                     const data = await response.json();
                     console.log('🔍 Queries data received successfully');
+                    console.log('🔍 Full response data:', data);
                     console.log('🔍 Number of queries:', data.queries ? data.queries.length : 0);
                     console.log('🔍 Total count:', data.total_count);
                     displayQueries(data.queries);
@@ -645,6 +650,11 @@
                 }
             } catch (error) {
                 console.error('Error loading queries:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    type: error.constructor.name
+                });
                 showQueriesError('Network error loading queries');
             }
         }

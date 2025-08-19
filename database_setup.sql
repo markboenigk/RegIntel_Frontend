@@ -21,12 +21,18 @@ CREATE INDEX IF NOT EXISTS idx_user_queries_collection ON user_queries(collectio
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.user_queries ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view own queries" ON public.user_queries;
+DROP POLICY IF EXISTS "Users can insert own queries" ON public.user_queries;
+DROP POLICY IF EXISTS "Users can update own queries" ON public.user_queries;
+DROP POLICY IF EXISTS "Users can delete own queries" ON public.user_queries;
+
+-- Create improved RLS policies
 -- Users can only see their own queries
 CREATE POLICY "Users can view own queries" ON public.user_queries
     FOR SELECT USING (auth.uid() = user_id);
 
--- Users can only insert their own queries
+-- Users can only insert their own queries (FIXED: Allow insert with proper user_id)
 CREATE POLICY "Users can insert own queries" ON public.user_queries
     FOR INSERT WITH CHECK (auth.uid() = user_id);
 

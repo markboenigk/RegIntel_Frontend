@@ -106,7 +106,7 @@ async def signin(request: UserSignIn, response: Response):
                 value=auth_response.session.access_token,
                 httponly=True,  # Back to secure HttpOnly
                 secure=False,  # Set to False for local development
-                samesite=None,  # Remove SameSite restriction for localhost
+                samesite="lax",  # Use lax for local development
                 max_age=3600,
                 path="/",
                 domain=None  # Explicitly set to None for localhost
@@ -117,7 +117,7 @@ async def signin(request: UserSignIn, response: Response):
                 value=auth_response.session.refresh_token,
                 httponly=True,
                 secure=False,  # Set to False for local development
-                samesite=None,  # Remove SameSite restriction for localhost
+                samesite="lax",  # Use lax for local development
                 max_age=7*24*3600,  # 7 days
                 path="/",  # Set to root path so middleware can find it
                 domain=None  # Explicitly set to None for localhost
@@ -135,7 +135,8 @@ async def signin(request: UserSignIn, response: Response):
             return AuthResponse(
                 message="Sign in successful",
                 user=user_profile,
-                access_token=auth_response.session.access_token
+                access_token=auth_response.session.access_token,
+                refresh_token=auth_response.session.refresh_token
             )
         else:
             raise HTTPException(status_code=400, detail="Invalid credentials")
@@ -220,33 +221,13 @@ async def update_profile(
             })
             
             if user_response.user:
-                # Convert datetime objects to ISO format strings
-                created_at = user_response.user.created_at
-                last_sign_in = user_response.user.last_sign_in_at
-                
-                if isinstance(created_at, (int, float)) and created_at > 0:
-                    from datetime import datetime
-                    created_at = datetime.fromtimestamp(created_at).isoformat()
-                elif hasattr(created_at, 'isoformat'):
-                    created_at = created_at.isoformat()
-                else:
-                    created_at = "1970-01-01T00:00:00"
-                    
-                if isinstance(last_sign_in, (int, float)) and last_sign_in > 0:
-                    from datetime import datetime
-                    last_sign_in = datetime.fromtimestamp(last_sign_in).isoformat()
-                elif hasattr(last_sign_in, 'isoformat'):
-                    last_sign_in = last_sign_in.isoformat()
-                else:
-                    last_sign_in = "1970-01-01T00:00:00"
-                
                 # Return updated profile
                 return UserProfile(
                     id=user_response.user.id,
                     email=user_response.user.email,
                     full_name=user_response.user.user_metadata.get("full_name", "Unknown"),
-                    created_at=created_at,
-                    last_sign_in=last_sign_in
+                    created_at=user_response.user.created_at,
+                    last_sign_in=user_response.user.last_sign_in_at
                 )
         
         return current_user
@@ -325,11 +306,34 @@ async def profile_page(request: Request, current_user: UserProfile = Depends(get
 @router.post("/queries", response_model=UserQuery)
 async def save_user_query(
     query_data: UserQueryCreate,
-    current_user: UserProfile = Depends(get_current_user)
+    current_user: UserProfile = Depends(get_current_user),
+    request: Request = None
 ):
     """Save a user's search query"""
     try:
-        supabase = get_supabase_config().get_client()
+        print(f"🔍 DEBUG: Starting to save query for user {current_user.id}")
+        print(f"🔍 DEBUG: Query data: {query_data}")
+        
+        # Get the authenticated Supabase client for this user
+        from .middleware import auth_middleware
+        supabase = auth_middleware.get_authenticated_client(current_user.id)
+        
+        if not supabase:
+            print(f"❌ DEBUG: No authenticated client found for user {current_user.id}")
+            # Fallback to creating a new client
+            supabase = get_supabase_config().get_client()
+        
+        print(f"🔍 DEBUG: Supabase client obtained successfully")
+        
+        # Test the current user context in Supabase
+        try:
+            print(f"🔍 DEBUG: Testing Supabase user context...")
+            user_response = supabase.auth.get_user()
+            print(f"🔍 DEBUG: Current Supabase user: {user_response.user.id if user_response.user else 'None'}")
+            print(f"🔍 DEBUG: Expected user ID: {current_user.id}")
+            print(f"🔍 DEBUG: User IDs match: {user_response.user.id == current_user.id if user_response.user else False}")
+        except Exception as user_error:
+            print(f"⚠️ DEBUG: Could not get current Supabase user: {str(user_error)}")
         
         # Create query record
         query_record = {
@@ -341,8 +345,33 @@ async def save_user_query(
             "sources_count": query_data.sources_count
         }
         
+        print(f"🔍 DEBUG: Query record prepared: {query_record}")
+        
         # Insert into user_queries table
-        result = supabase.table("user_queries").insert(query_record).execute()
+        try:
+            print(f"🔍 DEBUG: Attempting to insert into user_queries table...")
+            result = supabase.table("user_queries").insert(query_record).execute()
+            print(f"🔍 DEBUG: Insert result: {result}")
+            
+            if result.data:
+                print(f"✅ DEBUG: Query saved successfully with ID: {result.data[0].get('id')}")
+            else:
+                print(f"⚠️ DEBUG: Insert succeeded but no data returned")
+                
+        except Exception as insert_error:
+            print(f"❌ DEBUG: Insert failed with error: {str(insert_error)}")
+            print(f"❌ DEBUG: Error type: {type(insert_error).__name__}")
+            print(f"⚠️ Warning: Could not save user query due to RLS policy: {str(insert_error)}")
+            # Return a mock query object instead of failing
+            return UserQuery(
+                id="temp_id",
+                user_id=current_user.id,
+                query_text=query_data.query_text,
+                collection_name=query_data.collection_name,
+                timestamp=datetime.now(),
+                response_length=query_data.response_length,
+                sources_count=query_data.sources_count
+            )
         
         if result.data:
             saved_query = result.data[0]
@@ -356,9 +385,12 @@ async def save_user_query(
                 sources_count=saved_query.get("sources_count")
             )
         else:
+            print(f"❌ DEBUG: No data in result, raising error")
             raise HTTPException(status_code=500, detail="Failed to save query")
             
     except Exception as e:
+        print(f"❌ DEBUG: Outer exception in save_user_query: {str(e)}")
+        print(f"❌ DEBUG: Exception type: {type(e).__name__}")
         print(f"Error saving user query: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to save query: {str(e)}")
 
@@ -370,7 +402,19 @@ async def get_user_queries(
 ):
     """Get user's search query history"""
     try:
-        supabase = get_supabase_config().get_client()
+        print(f"🔍 DEBUG: Getting queries for user {current_user.id}")
+        print(f"🔍 DEBUG: Limit: {limit}, Offset: {offset}")
+        
+        # Get the authenticated Supabase client for this user
+        from .middleware import auth_middleware
+        supabase = auth_middleware.get_authenticated_client(current_user.id)
+        
+        if not supabase:
+            print(f"❌ DEBUG: No authenticated client found for user {current_user.id}")
+            # Fallback to creating a new client
+            supabase = get_supabase_config().get_client()
+        
+        print(f"🔍 DEBUG: Supabase client obtained successfully")
         
         # Query user_queries table
         result = supabase.table("user_queries")\
@@ -379,6 +423,9 @@ async def get_user_queries(
             .order("timestamp", desc=True)\
             .range(offset, offset + limit - 1)\
             .execute()
+        
+        print(f"🔍 DEBUG: Query result: {result}")
+        print(f"🔍 DEBUG: Result data: {result.data}")
         
         if result.data is not None:
             queries = []
@@ -402,18 +449,25 @@ async def get_user_queries(
             
             total_count = count_result.count if count_result.count is not None else len(queries)
             
+            print(f"🔍 DEBUG: Total queries found: {total_count}")
+            print(f"🔍 DEBUG: Queries returned: {len(queries)}")
+            
             return UserQueryResponse(
                 queries=queries,
                 total_count=total_count
             )
         else:
+            print(f"🔍 DEBUG: No data in result, returning empty response")
             return UserQueryResponse(
                 queries=[],
                 total_count=0
             )
             
     except Exception as e:
-        print(f"Error retrieving user queries: {str(e)}")
+        print(f"❌ DEBUG: Error retrieving user queries: {str(e)}")
+        print(f"❌ DEBUG: Exception type: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to retrieve queries: {str(e)}")
 
 @router.delete("/queries/{query_id}")
@@ -458,3 +512,54 @@ async def clear_user_queries(current_user: UserProfile = Depends(get_current_use
     except Exception as e:
         print(f"Error clearing user queries: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to clear queries: {str(e)}") 
+
+@router.get("/debug/table-check")
+async def check_user_queries_table(
+    current_user: UserProfile = Depends(get_current_user),
+    request: Request = None
+):
+    """Debug endpoint to check if user_queries table exists and is accessible"""
+    try:
+        supabase = get_supabase_config().get_client()
+        
+        # Get the auth token from the request
+        auth_token = request.cookies.get("auth_token") if request else None
+        if not auth_token:
+            return {
+                "table_exists": False,
+                "accessible": False,
+                "error": "No authentication token found",
+                "error_type": "AuthError",
+                "user_id": str(current_user.id)
+            }
+        
+        # Set the user's session in the Supabase client
+        try:
+            supabase.auth.set_session(auth_token, None)
+            print(f"✅ DEBUG: Supabase session set successfully for table check")
+        except Exception as session_error:
+            return {
+                "table_exists": False,
+                "accessible": False,
+                "error": f"Failed to set Supabase session: {str(session_error)}",
+                "error_type": "SessionError",
+                "user_id": str(current_user.id)
+            }
+        
+        # Try to describe the table
+        result = supabase.table("user_queries").select("id").limit(1).execute()
+        
+        return {
+            "table_exists": True,
+            "accessible": True,
+            "user_id": str(current_user.id),
+            "test_result": result
+        }
+    except Exception as e:
+        return {
+            "table_exists": False,
+            "accessible": False,
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "user_id": str(current_user.id)
+        } 

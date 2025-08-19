@@ -669,13 +669,10 @@ input[type="number"] {
 }
 
 .info-table th {
-    background: #f5f5f7;
+    background: #f8f9fa;
     padding: 12px 16px;
     text-align: left;
-    font-weight: 600;
-    color: #1d1d1f;
     border-bottom: 1px solid #e5e5e7;
-    font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -683,7 +680,6 @@ input[type="number"] {
 .info-table td {
     padding: 12px 16px;
     border-bottom: 1px solid #f0f0f0;
-    color: #6d6d70;
     vertical-align: top;
 }
 
@@ -726,11 +722,7 @@ input[type="number"] {
     letter-spacing: 0.5px;
 }
 
-.status-badge.warning {
-    background: #fff3cd;
-    color: #856404;
-    border: 1px solid #ffeaa7;
-}
+
 
 .status-badge.news {
     background: #d1ecf1;
@@ -738,17 +730,31 @@ input[type="number"] {
     border: 1px solid #bee5eb;
 }
 
+/* Category badge styling for RSS news */
+.category-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #f8f9fa;
+    color: #6d6d70;
+    border: 1px solid #e5e5e7;
+}
+
 /* Warning Letters specific styling */
-.info-table-section:has(h3:contains("Warning Letters")) {
-    border-left: 4px solid #ff6b6b;
+.info-table-section {
+    border-left: 4px solid #667eea;
 }
 
-.info-table-section h3:contains("Warning Letters") {
-    color: #d63031;
+.info-table-section h3 {
+    color: #4a5568;
 }
 
-.info-table-section h3:contains("Warning Letters") i {
-    color: #ff6b6b;
+.info-table-section h3 i {
+    color: #667eea;
     animation: pulse-warning 2s ease-in-out infinite;
 }
 
@@ -768,36 +774,109 @@ input[type="number"] {
 
 /* Enhanced status badges for warning letters */
 .status-badge.warning {
-    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border: none;
-    box-shadow: 0 2px 4px rgba(255, 107, 107, 0.3);
+    box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
     transition: all 0.3s ease;
 }
 
 .status-badge.warning:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(255, 107, 107, 0.4);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
 }
 
-/* Company name styling */
-.info-table td:nth-child(2) {
+/* Unified table styling - all tables use the same colors and fonts */
+.info-table {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Force override any conflicting styles */
+.info-table td,
+.info-table th {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif !important;
+}
+
+.info-table th {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 600;
-    color: #2d3436;
+    font-size: 0.85rem;
+    color: #4a5568;
 }
 
-/* Subject column styling */
-.info-table td:nth-child(3) {
-    color: #636e72;
-    line-height: 1.4;
+.info-table td {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 400;
+    font-size: 0.9rem;
 }
 
-/* Date column styling */
+/* Unified column styling for ALL tables */
 .info-table td:nth-child(1) {
-    color: #74b9ff;
+    color: #667eea !important;
     font-weight: 500;
     font-size: 0.85rem;
 }
+
+.info-table td:nth-child(2) {
+    color: #1d1d1f !important;
+    font-weight: 600;
+}
+
+.info-table td:nth-child(3) {
+    color: #6d6d70 !important;
+    font-weight: 400;
+}
+
+.info-table td:nth-child(4) {
+    color: #6d6d70 !important;
+    font-weight: 400;
+}
+
+
+
+/* RSS Feeds specific styling - override warning letters styling for RSS section */
+.info-table-section:nth-child(2) {
+    border-left: 4px solid #007aff;
+}
+
+.info-table-section:nth-child(2) h3 i {
+    color: #007aff;
+    animation: pulse-rss 2s ease-in-out infinite;
+}
+
+@keyframes pulse-rss {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+
+/* Enhanced status badges for RSS feeds */
+.status-badge.rss {
+    background: linear-gradient(135deg, #007aff 0%, #0056cc 100%);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 122, 255, 0.3);
+    transition: all 0.3s ease;
+}
+
+.status-badge.rss:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 122, 255, 0.4);
+}
+
+
+
+
+
+
 
 /* Loading state for warning letters */
 .loading-message:contains("Supabase") {
