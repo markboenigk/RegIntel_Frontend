@@ -97,7 +97,7 @@ async def get_embedding(text: str) -> List[float]:
         print(f"Error getting embedding: {e}")
         return []
 
-async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int, is_latest_query: bool, is_date_query: bool = False, is_company_query: bool = False) -> List[Dict[str, Any]]:
+async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int) -> List[Dict[str, Any]]:
     """Search FDA warning letters using Supabase pgvector."""
     try:
         from auth.config import get_supabase_config
@@ -115,43 +115,20 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
         async def execute_query():
             # Use direct pgvector query (fallback if RPC function doesn't exist)
             try:
+                print(f"🔍 DEBUG: Trying RPC function with embedding length: {len(embedding_list)}")
                 response = supabase.rpc('search_warning_letters', {
                     'query_embedding': embedding_list,
                     'match_threshold': 0.1,
                     'match_count': search_limit
                 }).execute()
+                print(f"🔍 DEBUG: RPC function successful, got {len(response.data) if response.data else 0} results")
             except Exception as rpc_error:
                 print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
-                # For "latest" queries, use vector table directly (likely faster and more reliable)
-                if is_latest_query:
-                    print(f"🔍 DEBUG: Using vector table for latest query (faster approach)")
-                    # Use a much smaller limit for latest queries to avoid timeout
-                    latest_limit = min(search_limit, 5)  # Cap at 5 for performance
-                    
-                    # For date queries, only select the date field for maximum speed
-                    if is_date_query:
-                        print(f"🔍 DEBUG: Date query detected, selecting only date field from vector table")
-                        response = supabase.table('warning_letters_vectors').select(
-                            'letter_date'
-                        ).order('letter_date', desc=True).limit(1).execute()
-                    elif is_company_query:
-                        print(f"🔍 DEBUG: Company query detected, selecting company, date, and content fields from vector table")
-                        response = supabase.table('warning_letters_vectors').select(
-                            'company_name,letter_date,text_content'
-                        ).order('letter_date', desc=True).limit(1).execute()
-                    else:
-                        print(f"🔍 DEBUG: Full latest query, selecting key fields from vector table")
-                        response = supabase.table('warning_letters_vectors').select(
-                            'text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id'
-                        ).order('letter_date', desc=True).limit(latest_limit).execute()
-                    
-                    print(f"🔍 DEBUG: Vector table query successful")
-                else:
-                    # Fallback to vector table with limited fields for better performance
-                    print(f"🔍 DEBUG: Using vector table with limited fields")
-                    response = supabase.table('warning_letters_vectors').select(
-                        'text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id,violations,required_actions,systemic_issues,regulatory_consequences'
-                    ).limit(search_limit).execute()
+                # Use vector table with essential fields for all queries
+                print(f"🔍 DEBUG: Using vector table with essential fields")
+                response = supabase.table('warning_letters_vectors').select(
+                    'text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id'
+                ).order('letter_date', desc=True).limit(search_limit).execute()
             
             return response
         
@@ -167,6 +144,9 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
             return []
         
         print(f"🔍 DEBUG: Found {len(response.data)} results from pgvector")
+        if response.data:
+            print(f"🔍 DEBUG: First result - company: {response.data[0].get('company_name')}, date: {response.data[0].get('letter_date')}")
+            print(f"🔍 DEBUG: Sample text: {response.data[0].get('text_content', '')[:200]}...")
         
         sources = []
         for row in response.data:
@@ -182,64 +162,19 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                 print(f"🔍 DEBUG: Row data - letter_date: {row.get('letter_date')}, type: {type(row.get('letter_date'))}")
                 print(f"🔍 DEBUG: Available fields: {list(row.keys())}")
                 
-                # Handle different table schemas (analytics vs vectors)
-                if 'summary' in row:
-                    # Analytics table schema
-                    metadata = {
-                        "company_name": row.get('company_name', 'Unknown Company'),
-                        "letter_date": row.get('letter_date', 'Unknown Date'),
-                        "chunk_type": "warning_letter",
-                        "chunk_id": f"analytics_{row.get('letter_date', 'unknown')}",
-                        "warning_letter_id": f"analytics_{row.get('company_name', 'unknown')}",
-                        "violations": [],
-                        "required_actions": [],
-                        "systemic_issues": [],
-                        "regulatory_consequences": []
-                    }
-                    text_content = row.get('summary', 'No summary available')
-                elif is_date_query and 'letter_date' in row:
-                    # Date-only query from vector table
-                    metadata = {
-                        "company_name": "Latest Warning Letter",
-                        "letter_date": row.get('letter_date', 'Unknown Date'),
-                        "chunk_type": "warning_letter",
-                        "chunk_id": f"date_{row.get('letter_date', 'unknown')}",
-                        "warning_letter_id": "latest_date",
-                        "violations": [],
-                        "required_actions": [],
-                        "systemic_issues": [],
-                        "regulatory_consequences": []
-                    }
-                    text_content = f"The latest FDA warning letter was issued on {row.get('letter_date', 'Unknown Date')}."
-                elif is_company_query and 'company_name' in row:
-                    # Company query from vector table with content
-                    metadata = {
-                        "company_name": row.get('company_name', 'Unknown Company'),
-                        "letter_date": row.get('letter_date', 'Unknown Date'),
-                        "chunk_type": "warning_letter",
-                        "chunk_id": f"company_{row.get('company_name', 'unknown')}",
-                        "warning_letter_id": "latest_company",
-                        "violations": [],
-                        "required_actions": [],
-                        "systemic_issues": [],
-                        "regulatory_consequences": []
-                    }
-                    # Use the actual text content from the database for better AI responses
-                    text_content = row.get('text_content', f"The latest FDA warning letter was issued to {row.get('company_name', 'Unknown Company')} on {row.get('letter_date', 'Unknown Date')}.")
-                else:
-                    # Vector table schema
-                    metadata = {
-                        "company_name": row.get('company_name', 'Unknown Company'),
-                        "letter_date": row.get('letter_date', 'Unknown Date'),
-                        "chunk_type": row.get('chunk_type', 'Unknown Type'),
-                        "chunk_id": row.get('chunk_id', 'Unknown Chunk'),
-                        "warning_letter_id": row.get('warning_letter_id', 'Unknown ID'),
-                        "violations": row.get('violations', '{}'),
-                        "required_actions": row.get('required_actions', '{}'),
-                        "systemic_issues": row.get('systemic_issues', '{}'),
-                        "regulatory_consequences": row.get('regulatory_consequences', '{}')
-                    }
-                    text_content = row.get('text_content', 'No content available')
+                # Use standard vector table schema for all queries
+                metadata = {
+                    "company_name": row.get('company_name', 'Unknown Company'),
+                    "letter_date": row.get('letter_date', 'Unknown Date'),
+                    "chunk_type": row.get('chunk_type', 'Unknown Type'),
+                    "chunk_id": row.get('chunk_id', 'Unknown Chunk'),
+                    "warning_letter_id": row.get('warning_letter_id', 'Unknown ID'),
+                    "violations": row.get('violations', '{}'),
+                    "required_actions": row.get('required_actions', '{}'),
+                    "systemic_issues": row.get('systemic_issues', '{}'),
+                    "regulatory_consequences": row.get('regulatory_consequences', '{}')
+                }
+                text_content = row.get('text_content', 'No content available')
                 
                 source = {
                     "text": text_content,
@@ -251,8 +186,8 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                 print(f"❌ DEBUG: Error parsing row: {e}")
                 continue
         
-        # Sort by date if this is a latest query
-        if is_latest_query:
+        # Sort by date for better relevance
+        if True:  # Always sort by date for better relevance
             print(f"🔍 DEBUG: Sorting results by letter_date for latest query")
             try:
                 def safe_date_sort(x):
@@ -405,22 +340,12 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
         print(f"🔍 DEBUG: Query: {query}")
         print(f"🔍 DEBUG: Limit: {top_k}")
         
-        # Check if this is a "latest" query and increase search limit to get more results
-        latest_keywords = ['latest', 'most recent', 'newest', 'recent', 'last']
-        is_latest_query = any(keyword in query.lower() for keyword in latest_keywords)
+        # Let vector search and LLM handle query understanding naturally
+        # No hardcoded keyword detection - let the AI do what it's designed to do
+        print(f"🔍 DEBUG: Using natural vector search for query: '{query}'")
         
-        # Check if this is a date-only query (faster processing)
-        date_keywords = ['when', 'date', 'issued', 'published']
-        is_date_query = any(keyword in query.lower() for keyword in date_keywords)
-        
-        # Check if this is a company-only query (faster processing)
-        company_keywords = ['which company', 'what company', 'who', 'company name']
-        is_company_query = any(keyword in query.lower() for keyword in company_keywords)
-        
-        # Increase search limit for latest queries to get more results to sort
-        search_limit = top_k * 3 if is_latest_query and target_collection == "fda_warning_letters" else top_k
-        if is_latest_query and target_collection == "fda_warning_letters":
-            print(f"🔍 DEBUG: Latest query detected, increasing search limit to {search_limit}")
+        # Use standard search limit for all queries
+        search_limit = top_k
         
         # Get query embedding for semantic search
         print(f"🔍 DEBUG: About to get embedding for query: '{query}'")
@@ -433,7 +358,7 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
 
         # Use Supabase pgvector for search
         if target_collection == "fda_warning_letters":
-            return await search_fda_warning_letters_pgvector(query_embedding, search_limit, is_latest_query, is_date_query, is_company_query)
+            return await search_fda_warning_letters_pgvector(query_embedding, search_limit)
         else:
             return await search_rss_feeds_pgvector(query_embedding, search_limit)
         
@@ -555,8 +480,8 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
                     print(f"❌ DEBUG: Error parsing hit: {e}")
                     continue
             
-            # Check if this is a "latest" or "most recent" query and sort by date
-            if is_latest_query and target_collection == "fda_warning_letters":
+            # Sort by date for better relevance
+            if target_collection == "fda_warning_letters":
                 print(f"🔍 DEBUG: Detected latest query, sorting by date")
                 # Sort sources by letter_date in descending order (most recent first)
                 def parse_date(date_str):
@@ -838,6 +763,7 @@ async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], s
                 if collection_type == "fda_warning_letters":
                     company = metadata.get('company_name', 'Unknown Company')
                     date = metadata.get('letter_date', 'Unknown Date')
+                    print(f"🔍 DEBUG: Context formatting - company: {company}, date: {date}")
                     context += f"{i}. {title} - Company: {company}, Date: {date}\n"
                     
                     # For FDA warning letters, use metadata fields instead of raw content
