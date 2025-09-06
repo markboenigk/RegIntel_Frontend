@@ -109,37 +109,53 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
         # Convert embedding to list format for pgvector
         embedding_list = [float(x) for x in query_embedding]
         
-        # Use direct pgvector query (fallback if RPC function doesn't exist)
-        try:
-            response = supabase.rpc('search_warning_letters', {
-                'query_embedding': embedding_list,
-                'match_threshold': 0.1,
-                'match_count': search_limit
-            }).execute()
-        except Exception as rpc_error:
-            print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
-            # For "latest" queries, use the analytics table which is likely smaller and faster
-            if is_latest_query:
-                print(f"🔍 DEBUG: Using analytics table for latest query")
-                # Use a much smaller limit for latest queries to avoid timeout
-                latest_limit = min(search_limit, 5)  # Cap at 5 for performance
-                
-                # For date queries, only select the date field for maximum speed
-                if is_date_query:
-                    print(f"🔍 DEBUG: Date query detected, selecting only date field")
-                    response = supabase.table('warning_letters_analytics').select(
-                        'letter_date'
-                    ).order('letter_date', desc=True).limit(1).execute()
+        # Add timeout wrapper for Vercel
+        import asyncio
+        
+        async def execute_query():
+            # Use direct pgvector query (fallback if RPC function doesn't exist)
+            try:
+                response = supabase.rpc('search_warning_letters', {
+                    'query_embedding': embedding_list,
+                    'match_threshold': 0.1,
+                    'match_count': search_limit
+                }).execute()
+            except Exception as rpc_error:
+                print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
+                # For "latest" queries, use vector table directly (likely faster and more reliable)
+                if is_latest_query:
+                    print(f"🔍 DEBUG: Using vector table for latest query (faster approach)")
+                    # Use a much smaller limit for latest queries to avoid timeout
+                    latest_limit = min(search_limit, 5)  # Cap at 5 for performance
+                    
+                    # For date queries, only select the date field for maximum speed
+                    if is_date_query:
+                        print(f"🔍 DEBUG: Date query detected, selecting only date field from vector table")
+                        response = supabase.table('warning_letters_vectors').select(
+                            'letter_date'
+                        ).order('letter_date', desc=True).limit(1).execute()
+                    else:
+                        print(f"🔍 DEBUG: Full latest query, selecting key fields from vector table")
+                        response = supabase.table('warning_letters_vectors').select(
+                            'text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id'
+                        ).order('letter_date', desc=True).limit(latest_limit).execute()
+                    
+                    print(f"🔍 DEBUG: Vector table query successful")
                 else:
-                    response = supabase.table('warning_letters_analytics').select(
-                        'letter_date,company_name,summary'
-                    ).order('letter_date', desc=True).limit(latest_limit).execute()
-            else:
-                # Fallback to vector table with limited fields for better performance
-                print(f"🔍 DEBUG: Using vector table with limited fields")
-                response = supabase.table('warning_letters_vectors').select(
-                    'text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id,violations,required_actions,systemic_issues,regulatory_consequences'
-                ).limit(search_limit).execute()
+                    # Fallback to vector table with limited fields for better performance
+                    print(f"🔍 DEBUG: Using vector table with limited fields")
+                    response = supabase.table('warning_letters_vectors').select(
+                        'text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id,violations,required_actions,systemic_issues,regulatory_consequences'
+                    ).limit(search_limit).execute()
+            
+            return response
+        
+        # Execute query with timeout
+        try:
+            response = await asyncio.wait_for(execute_query(), timeout=10.0)
+        except asyncio.TimeoutError:
+            print("❌ DEBUG: Query timed out after 10 seconds")
+            return []
         
         if not response.data:
             print("❌ DEBUG: No data returned from pgvector search")
