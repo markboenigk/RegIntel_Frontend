@@ -362,21 +362,6 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
         else:
             return await search_rss_feeds_pgvector(query_embedding, search_limit)
         
-        # Use different schemas based on collection type
-        if target_collection == "fda_warning_letters":
-            # FDA Warning Letters schema
-            output_fields = [
-                "text_content", "company_name", "letter_date", "chunk_type", 
-                "chunk_id", "violations", "required_actions", "systemic_issues",
-                "regulatory_consequences", "product_types", "product_categories"
-            ]
-        else:
-            # RSS Feeds schema (default)
-            output_fields = [
-                "text_content", "article_title", "published_date", "feed_name", 
-                "chunk_type", "companies", "products", "regulations", "regulatory_bodies"
-            ]
-        
         # Convert to float32 array (Zilliz expects this)
         query_embedding_float32 = [float(x) for x in query_embedding]
         
@@ -742,12 +727,20 @@ async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], s
         collection_type = "general"
         
         if sources:
-            # Determine collection type from first source
+            # Determine collection type from first source metadata
             first_source = sources[0]
-            collection_type = first_source.get('collection', 'general')
+            metadata = first_source.get('metadata', {})
+            chunk_type = metadata.get('chunk_type', 'unknown')
+            # Check for FDA warning letters by looking for specific fields or chunk types
+            if chunk_type == 'warning_letter' or 'letter_date' in metadata or 'company_name' in metadata:
+                collection_type = "fda_warning_letters"
+            else:
+                collection_type = "rss_feeds"
+            print(f"🔍 DEBUG: Collection type detection - chunk_type: '{chunk_type}', collection_type: '{collection_type}'")
             
             # Build context with collection-specific information (top 3 sources for better coverage)
             context = f"\n\nRelevant sources from {collection_type.replace('_', ' ').title()}:\n"
+            print(f"🔍 DEBUG: Building context for {len(sources)} sources, collection_type: {collection_type}")
             for i, source in enumerate(sources[:3], 1):  # Take top 3 sources instead of just 1
                 metadata = source.get('metadata', {})
                 # Determine title per collection
@@ -764,9 +757,24 @@ async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], s
                     company = metadata.get('company_name', 'Unknown Company')
                     date = metadata.get('letter_date', 'Unknown Date')
                     print(f"🔍 DEBUG: Context formatting - company: {company}, date: {date}")
-                    context += f"{i}. {title} - Company: {company}, Date: {date}\n"
+                    # Make the context more explicit for date queries
+                    context_line = f"{i}. FDA Warning Letter - Company: {company}, Date: {date}\n"
+                    context += context_line
+                    print(f"🔍 DEBUG: Added context line: {context_line.strip()}")
                     
-                    # For FDA warning letters, use metadata fields instead of raw content
+                    # Add the actual text content for more context
+                    if content and len(content) > 50:
+                        context += f"   Content: {content[:500]}...\n"
+                        print(f"🔍 DEBUG: Added content excerpt: {content[:100]}...")
+                else:
+                    # RSS feed formatting
+                    feed_name = metadata.get('article_feed_name', 'Unknown Feed')
+                    article_date = metadata.get('article_published_date', 'Unknown Date')
+                    print(f"🔍 DEBUG: Using RSS formatting - feed: {feed_name}, date: {article_date}")
+                    context += f"{i}. {title} - Feed: {feed_name}, Date: {article_date}\n"
+                
+                # For FDA warning letters, use metadata fields instead of raw content
+                if collection_type == "fda_warning_letters":
                     systemic_issues = metadata.get('systemic_issues', '[]')
                     regulatory_consequences = metadata.get('regulatory_consequences', '[]')
                     violations = metadata.get('violations', '[]')
@@ -840,10 +848,18 @@ async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], s
                 "Keep the answer concise (3-5 sentences)."
             )
         
+        # Add the context to the system message
+        if context:
+            system_content += f"\n\n{context}"
+            print(f"🔍 DEBUG: Full context being sent to AI:\n{context}")
+        else:
+            print(f"🔍 DEBUG: No context to send to AI")
+        
         system_message = {
             "role": "system", 
             "content": system_content
         }
+        print(f"🔍 DEBUG: Final system message content:\n{system_content}")
         messages.insert(0, system_message)
         
         response = await client.chat.completions.create(
@@ -899,6 +915,12 @@ async def chat(request: ChatRequest):
         history = [ChatMessage(role=msg.role, content=msg.content) 
                   for msg in request.conversation_history]
         print(f"🔍 DEBUG: Converted {len(history)} history messages")
+        
+        # Debug sources before sending to AI
+        if sources:
+            print(f"🔍 DEBUG: Sources before AI - count: {len(sources)}")
+            print(f"🔍 DEBUG: First source: {sources[0]}")
+            print(f"🔍 DEBUG: First source metadata: {sources[0].get('metadata', {})}")
         
         # Get AI response
         response = await chat_with_gpt(request.message, history, sources)
