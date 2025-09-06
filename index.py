@@ -115,6 +115,15 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
         # Try Milvus search first, fallback only if it fails
         print("🔍 DEBUG: Attempting Milvus vector search...")
         
+        # Check if this is a "latest" query and increase search limit to get more results
+        latest_keywords = ['latest', 'most recent', 'newest', 'recent', 'last']
+        is_latest_query = any(keyword in query.lower() for keyword in latest_keywords)
+        
+        # Increase search limit for latest queries to get more results to sort
+        search_limit = top_k * 3 if is_latest_query and target_collection == "fda_warning_letters" else top_k
+        if is_latest_query and target_collection == "fda_warning_letters":
+            print(f"🔍 DEBUG: Latest query detected, increasing search limit to {search_limit}")
+        
         # Get query embedding for semantic search
         print(f"🔍 DEBUG: About to get embedding for query: '{query}'")
         query_embedding = await get_embedding(query)
@@ -167,7 +176,7 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
         search_data = {
             "collectionName": target_collection,
             "data": [query_embedding_float32],  # Note: embedding should be wrapped in a list
-            "limit": top_k,
+            "limit": search_limit,
             "outputFields": output_fields,
             "metricType": "COSINE",
             "params": {"nprobe": 10},
@@ -262,6 +271,42 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
                 except Exception as e:
                     print(f"❌ DEBUG: Error parsing hit: {e}")
                     continue
+            
+            # Check if this is a "latest" or "most recent" query and sort by date
+            if is_latest_query and target_collection == "fda_warning_letters":
+                print(f"🔍 DEBUG: Detected latest query, sorting by date")
+                # Sort sources by letter_date in descending order (most recent first)
+                def parse_date(date_str):
+                    try:
+                        # Handle different date formats
+                        if not date_str or date_str == 'Unknown Date':
+                            return datetime(1900, 1, 1)  # Put unknown dates at the end
+                        
+                        # Try different date formats
+                        date_formats = [
+                            '%B %d, %Y',      # July 11, 2025, August 28, 2025
+                            '%m/%d/%Y',       # 07/11/2025, 08/28/2025
+                            '%Y-%m-%d',       # 2025-07-11, 2025-08-28
+                        ]
+                        
+                        for fmt in date_formats:
+                            try:
+                                return datetime.strptime(date_str, fmt)
+                            except ValueError:
+                                continue
+                        
+                        # If no format matches, return a very old date
+                        return datetime(1900, 1, 1)
+                    except:
+                        return datetime(1900, 1, 1)
+                
+                # Sort by date (most recent first)
+                sources.sort(key=lambda x: parse_date(x.get('metadata', {}).get('letter_date', '')), reverse=True)
+                print(f"🔍 DEBUG: Sorted sources by date, most recent first")
+                
+                # Show the sorted dates for debugging
+                sorted_dates = [parse_date(x.get('metadata', {}).get('letter_date', '')) for x in sources]
+                print(f"🔍 DEBUG: Sorted dates: {[d.strftime('%Y-%m-%d') for d in sorted_dates[:5]]}")
             
             # Return all sources up to the limit
             sources = sources[:top_k]
@@ -800,7 +845,7 @@ async def get_latest_warning_letters(limit: int = 10):
         
         # Query the warning_letter_analytics table for the most recent entries
         print(f"🔍 DEBUG: About to query Supabase for unique warning letters")
-        response = supabase.table('warning_letter_analytics').select(
+        response = supabase.table('warning_letters_analytics').select(
             'letter_date,company_name,summary'
         ).order('letter_date', desc=True).execute()  # Get all rows, we'll deduplicate and limit in Python
         
