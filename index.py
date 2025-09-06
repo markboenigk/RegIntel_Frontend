@@ -97,8 +97,153 @@ async def get_embedding(text: str) -> List[float]:
         print(f"Error getting embedding: {e}")
         return []
 
+async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int, is_latest_query: bool) -> List[Dict[str, Any]]:
+    """Search FDA warning letters using Supabase pgvector."""
+    try:
+        from auth.config import get_supabase_config
+        supabase = get_supabase_config().get_client()
+        
+        print(f"🔍 DEBUG: Searching FDA warning letters with pgvector")
+        print(f"🔍 DEBUG: Search limit: {search_limit}")
+        
+        # Convert embedding to list format for pgvector
+        embedding_list = [float(x) for x in query_embedding]
+        
+        # Use direct pgvector query (fallback if RPC function doesn't exist)
+        try:
+            response = supabase.rpc('search_warning_letters', {
+                'query_embedding': embedding_list,
+                'match_threshold': 0.1,
+                'match_count': search_limit
+            }).execute()
+        except Exception as rpc_error:
+            print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
+            # Fallback to direct query
+            response = supabase.table('warning_letters_vectors').select('*').execute()
+        
+        if not response.data:
+            print("❌ DEBUG: No data returned from pgvector search")
+            return []
+        
+        print(f"🔍 DEBUG: Found {len(response.data)} results from pgvector")
+        
+        sources = []
+        for row in response.data:
+            try:
+                # Parse the text_vector back to list if needed
+                text_vector = row.get('text_vector')
+                if isinstance(text_vector, str):
+                    # Parse JSON string to list
+                    import json
+                    text_vector = json.loads(text_vector)
+                
+                metadata = {
+                    "company_name": row.get('company_name', 'Unknown Company'),
+                    "letter_date": row.get('letter_date', 'Unknown Date'),
+                    "chunk_type": row.get('chunk_type', 'Unknown Type'),
+                    "chunk_id": row.get('chunk_id', 'Unknown Chunk'),
+                    "warning_letter_id": row.get('warning_letter_id', 'Unknown ID'),
+                    "violations": row.get('violations', '{}'),
+                    "required_actions": row.get('required_actions', '{}'),
+                    "systemic_issues": row.get('systemic_issues', '{}'),
+                    "regulatory_consequences": row.get('regulatory_consequences', '{}')
+                }
+                
+                source = {
+                    "text": row.get('text_content', ''),
+                    "metadata": metadata
+                }
+                sources.append(source)
+                
+            except Exception as e:
+                print(f"❌ DEBUG: Error parsing row: {e}")
+                continue
+        
+        # Sort by date if this is a latest query
+        if is_latest_query:
+            print(f"🔍 DEBUG: Sorting results by letter_date for latest query")
+            try:
+                sources.sort(key=lambda x: x['metadata'].get('letter_date', ''), reverse=True)
+                # Trim to original limit after sorting
+                sources = sources[:search_limit // 3]  # Convert back to original top_k
+                print(f"🔍 DEBUG: After sorting and trimming: {len(sources)} sources")
+            except Exception as sort_error:
+                print(f"⚠️ DEBUG: Error sorting by date: {sort_error}")
+        
+        print(f"🔍 DEBUG: Returning {len(sources)} FDA warning letter sources")
+        return sources
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error in FDA pgvector search: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+async def search_rss_feeds_pgvector(query_embedding: List[float], search_limit: int) -> List[Dict[str, Any]]:
+    """Search RSS feeds using Supabase pgvector."""
+    try:
+        from auth.config import get_supabase_config
+        supabase = get_supabase_config().get_client()
+        
+        print(f"🔍 DEBUG: Searching RSS feeds with pgvector")
+        print(f"🔍 DEBUG: Search limit: {search_limit}")
+        
+        # Convert embedding to list format for pgvector
+        embedding_list = [float(x) for x in query_embedding]
+        
+        # Use direct pgvector query for RSS feeds (fallback if RPC function doesn't exist)
+        try:
+            response = supabase.rpc('search_rss_feeds', {
+                'query_embedding': embedding_list,
+                'match_threshold': 0.1,
+                'match_count': search_limit
+            }).execute()
+        except Exception as rpc_error:
+            print(f"⚠️ DEBUG: RSS RPC function not available, using direct query: {rpc_error}")
+            # Fallback to direct query
+            response = supabase.table('rss_feeds').select('*').execute()
+        
+        if not response.data:
+            print("❌ DEBUG: No data returned from RSS pgvector search")
+            return []
+        
+        print(f"🔍 DEBUG: Found {len(response.data)} RSS results from pgvector")
+        
+        sources = []
+        for row in response.data:
+            try:
+                metadata = {
+                    "article_title": row.get('article_title', 'Unknown Title'),
+                    "published_date": row.get('published_date', 'Unknown Date'),
+                    "feed_name": row.get('feed_name', 'Unknown Feed'),
+                    "chunk_type": row.get('chunk_type', 'Unknown Type'),
+                    "companies": row.get('companies', '[]'),
+                    "products": row.get('products', '[]'),
+                    "regulations": row.get('regulations', '[]'),
+                    "regulatory_bodies": row.get('regulatory_bodies', '[]')
+                }
+                
+                source = {
+                    "text": row.get('text_content', ''),
+                    "metadata": metadata
+                }
+                sources.append(source)
+                
+            except Exception as e:
+                print(f"❌ DEBUG: Error parsing RSS row: {e}")
+                continue
+        
+        print(f"🔍 DEBUG: Returning {len(sources)} RSS feed sources")
+        return sources
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error in RSS pgvector search: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 async def search_similar_documents(query: str, collection_name: str = "rss_feeds", top_k: int = 5) -> List[Dict[str, Any]]:
-    """Search for similar documents using vector similarity with real Milvus integration."""
+    """Search for similar documents using vector similarity with Supabase pgvector."""
     try:
         # Use specified collection or default
         target_collection = collection_name or DEFAULT_COLLECTION
@@ -106,14 +251,6 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
         print(f"🔍 DEBUG: Starting search in collection: {target_collection}")
         print(f"🔍 DEBUG: Query: {query}")
         print(f"🔍 DEBUG: Limit: {top_k}")
-        
-        # Check if Milvus credentials are available
-        if not MILVUS_URI or not MILVUS_TOKEN:
-            print("🔄 DEBUG: Milvus credentials not available, using fallback data")
-            return get_fallback_sources(query, target_collection, top_k)
-        
-        # Try Milvus search first, fallback only if it fails
-        print("🔍 DEBUG: Attempting Milvus vector search...")
         
         # Check if this is a "latest" query and increase search limit to get more results
         latest_keywords = ['latest', 'most recent', 'newest', 'recent', 'last']
@@ -133,26 +270,11 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
             return get_fallback_sources(query, target_collection, top_k)
         print(f"🔍 DEBUG: Embedding successful, proceeding with search")
 
-        # First, try to load the collection if it's not loaded
-        print(f"🔍 DEBUG: About to load collection '{target_collection}' if needed...")
-        load_success = await load_collection_if_needed(target_collection)
-        print(f"🔍 DEBUG: Collection loading result: {load_success}")
-        
-        if not load_success:
-            print(f"❌ DEBUG: Failed to load collection '{target_collection}', trying search anyway...")
-        
-        # Test Zilliz Cloud V2 API endpoints for search
-        search_endpoints = [
-            f"{MILVUS_URI}/v2/vectordb/entities/search",
-            f"{MILVUS_URI}/v2/vectordb/collections/search",
-            f"{MILVUS_URI}/v1/vectordb/entities/search",
-            f"{MILVUS_URI}/v1/vectordb/collections/search"
-        ]
-        
-        headers = {
-            "Authorization": f"Bearer {MILVUS_TOKEN}",
-            "Content-Type": "application/json"
-        }
+        # Use Supabase pgvector for search
+        if target_collection == "fda_warning_letters":
+            return await search_fda_warning_letters_pgvector(query_embedding, search_limit, is_latest_query)
+        else:
+            return await search_rss_feeds_pgvector(query_embedding, search_limit)
         
         # Use different schemas based on collection type
         if target_collection == "fda_warning_letters":
@@ -924,7 +1046,7 @@ async def get_latest_warning_letters(limit: int = 10):
         
         # Query the warning_letter_analytics table for the most recent entries
         print(f"🔍 DEBUG: About to query Supabase for unique warning letters")
-        response = supabase.table('warning_letterslike _analytics').select(
+        response = supabase.table('warning_letters_analytics').select(
             'letter_date,company_name,summary'
         ).order('letter_date', desc=True).execute()  # Get all rows, we'll deduplicate and limit in Python
         
