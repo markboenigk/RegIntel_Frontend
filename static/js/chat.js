@@ -1,4 +1,5 @@
-// Chat application JavaScript - SIMPLIFIED VERSION
+// Chat application JavaScript - SIMPLIFIED VERSION v4
+console.log('🔧 ChatApp v4 loaded - with fixed substring error handling');
 class ChatApp {
     constructor() {
         this.conversationHistory = [];
@@ -177,19 +178,32 @@ class ChatApp {
                 }
 
                 const data = await response.json();
+                console.log('🔍 DEBUG: Response data received:', data);
 
-                // Add assistant response to chat
-                this.addMessageToChat('assistant', data.response);
+                // Process response with comprehensive error handling
+                try {
+                    // Add assistant response to chat
+                    this.addMessageToChat('assistant', data.response);
+                    console.log('✅ DEBUG: Message added to chat successfully');
 
-                // Update sources
-                this.updateSources(data.sources);
+                    // Update sources
+                    this.updateSources(data.sources);
+                    console.log('✅ DEBUG: Sources updated successfully');
 
-                // Save query for authenticated users
-                this.saveUserQuery(message, selectedCollection, data.response, data.sources);
+                    // Save query for authenticated users
+                    this.saveUserQuery(message, selectedCollection, data.response, data.sources);
+                    console.log('✅ DEBUG: Query save attempted');
 
-                // Show subtle indicator that query was saved (for authenticated users)
-                if (this.isUserAuthenticated) {
-                    this.showQuerySavedIndicator();
+                    // Show subtle indicator that query was saved (for authenticated users)
+                    if (this.isUserAuthenticated) {
+                        this.showQuerySavedIndicator();
+                    }
+
+                    console.log('✅ DEBUG: All response processing completed successfully');
+                } catch (processingError) {
+                    console.error('❌ DEBUG: Error in response processing:', processingError);
+                    console.error('❌ DEBUG: Error stack:', processingError.stack);
+                    // Don't re-throw the error, just log it
                 }
 
                 // SIMPLIFIED: No reranking info to display
@@ -399,10 +413,23 @@ class ChatApp {
                 metadataDisplay += metadataDisplay ? ` | <strong>Title:</strong> ${this.escapeHtml(sourceTitle)}` : `<strong>Title:</strong> ${this.escapeHtml(sourceTitle)}`;
             }
 
+            // Get content from either 'content' or 'text' field with better error handling
+            const sourceContent = source.content || source.text || 'No content available';
+            console.log('🔍 DEBUG: Source content for display:', sourceContent, 'Type:', typeof sourceContent);
+
+            // Ensure sourceContent is a string and handle edge cases
+            const safeContent = (typeof sourceContent === 'string' && sourceContent.length > 0)
+                ? sourceContent
+                : 'No content available';
+
+            const truncatedContent = safeContent.length > 200
+                ? safeContent.substring(0, 200) + '...'
+                : safeContent;
+
             sourceDiv.innerHTML = `
                 <h4>Source ${index + 1}</h4>
                 ${metadataDisplay ? `<p class="source-metadata">${metadataDisplay}</p>` : ''}
-                <p class="source-text">${this.escapeHtml(source.content.substring(0, 200))}${source.content.length > 200 ? '...' : ''}</p>
+                <p class="source-text">${this.escapeHtml(truncatedContent)}</p>
             `;
             sourcesList.appendChild(sourceDiv);
         });

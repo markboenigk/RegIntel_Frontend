@@ -118,8 +118,8 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
             }).execute()
         except Exception as rpc_error:
             print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
-            # Fallback to direct query
-            response = supabase.table('warning_letters_vectors').select('*').execute()
+            # Fallback to direct query with limit to avoid performance issues
+            response = supabase.table('warning_letters_vectors').select('*').limit(search_limit * 2).execute()
         
         if not response.data:
             print("❌ DEBUG: No data returned from pgvector search")
@@ -136,6 +136,9 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                     # Parse JSON string to list
                     import json
                     text_vector = json.loads(text_vector)
+                
+                # Debug: Check the actual data structure
+                print(f"🔍 DEBUG: Row data - letter_date: {row.get('letter_date')}, type: {type(row.get('letter_date'))}")
                 
                 metadata = {
                     "company_name": row.get('company_name', 'Unknown Company'),
@@ -163,12 +166,41 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
         if is_latest_query:
             print(f"🔍 DEBUG: Sorting results by letter_date for latest query")
             try:
-                sources.sort(key=lambda x: x['metadata'].get('letter_date', ''), reverse=True)
+                def safe_date_sort(x):
+                    metadata = x.get('metadata', {})
+                    date_str = metadata.get('letter_date', '') if metadata else ''
+                    print(f"🔍 DEBUG: Sorting - date_str: '{date_str}', type: {type(date_str)}")
+                    
+                    if not date_str or date_str == 'Unknown Date':
+                        print(f"🔍 DEBUG: Using default date for: '{date_str}'")
+                        return datetime(1900, 1, 1)  # Put unknown dates at the end
+                    
+                    # Try different date formats
+                    date_formats = [
+                        '%B %d, %Y',      # July 11, 2025, August 28, 2025
+                        '%m/%d/%Y',       # 07/11/2025, 08/28/2025
+                        '%Y-%m-%d',       # 2025-07-11, 2025-08-28
+                    ]
+                    
+                    for fmt in date_formats:
+                        try:
+                            parsed_date = datetime.strptime(date_str, fmt)
+                            print(f"🔍 DEBUG: Successfully parsed '{date_str}' with format '{fmt}' -> {parsed_date}")
+                            return parsed_date
+                        except ValueError:
+                            continue
+                    
+                    # If no format matches, return a very old date
+                    print(f"🔍 DEBUG: No format matched for '{date_str}', using default date")
+                    return datetime(1900, 1, 1)
+                
+                sources.sort(key=safe_date_sort, reverse=True)
                 # Trim to original limit after sorting
                 sources = sources[:search_limit // 3]  # Convert back to original top_k
                 print(f"🔍 DEBUG: After sorting and trimming: {len(sources)} sources")
             except Exception as sort_error:
                 print(f"⚠️ DEBUG: Error sorting by date: {sort_error}")
+                # Continue without sorting if there's an error
         
         print(f"🔍 DEBUG: Returning {len(sources)} FDA warning letter sources")
         return sources
@@ -200,8 +232,15 @@ async def search_rss_feeds_pgvector(query_embedding: List[float], search_limit: 
             }).execute()
         except Exception as rpc_error:
             print(f"⚠️ DEBUG: RSS RPC function not available, using direct query: {rpc_error}")
-            # Fallback to direct query
-            response = supabase.table('rss_feeds').select('*').execute()
+            # Fallback to direct query - try rss_feed_vectors first, then rss_feeds_gold
+            try:
+                response = supabase.table('rss_feed_vectors').select('*').limit(search_limit * 2).execute()
+                print(f"✅ DEBUG: Using rss_feed_vectors table")
+            except Exception as vector_error:
+                print(f"⚠️ DEBUG: rss_feed_vectors not accessible, using rss_feeds_gold: {vector_error}")
+                response = supabase.table('rss_feeds_gold').select(
+                    'article_feed_name,article_published_date,article_title,content_category'
+                ).limit(search_limit * 2).execute()
         
         if not response.data:
             print("❌ DEBUG: No data returned from RSS pgvector search")
@@ -212,19 +251,32 @@ async def search_rss_feeds_pgvector(query_embedding: List[float], search_limit: 
         sources = []
         for row in response.data:
             try:
+                # Debug: Check the actual data structure and available fields
+                print(f"🔍 DEBUG: RSS Row data - article_title: {row.get('article_title')}, published_date: {row.get('article_published_date')}")
+                print(f"🔍 DEBUG: Available fields in row: {list(row.keys())}")
+                
                 metadata = {
                     "article_title": row.get('article_title', 'Unknown Title'),
-                    "published_date": row.get('published_date', 'Unknown Date'),
-                    "feed_name": row.get('feed_name', 'Unknown Feed'),
-                    "chunk_type": row.get('chunk_type', 'Unknown Type'),
-                    "companies": row.get('companies', '[]'),
-                    "products": row.get('products', '[]'),
-                    "regulations": row.get('regulations', '[]'),
-                    "regulatory_bodies": row.get('regulatory_bodies', '[]')
+                    "published_date": row.get('article_published_date', 'Unknown Date'),
+                    "feed_name": row.get('article_feed_name', 'Unknown Feed'),
+                    "chunk_type": row.get('content_category', 'Unknown Type'),
+                    "companies": [],
+                    "products": [],
+                    "regulations": [],
+                    "regulatory_bodies": []
                 }
                 
+                # Try to get the best available text content from the vector table
+                text_content = (row.get('text_content', '') or 
+                              row.get('content', '') or 
+                              row.get('article_content', '') or 
+                              row.get('summary', '') or 
+                              row.get('article_title', 'No content available'))
+                
+                print(f"🔍 DEBUG: Text content length: {len(text_content)}, preview: {text_content[:100]}...")
+                
                 source = {
-                    "text": row.get('text_content', ''),
+                    "text": text_content,
                     "metadata": metadata
                 }
                 sources.append(source)
@@ -232,6 +284,18 @@ async def search_rss_feeds_pgvector(query_embedding: List[float], search_limit: 
             except Exception as e:
                 print(f"❌ DEBUG: Error parsing RSS row: {e}")
                 continue
+        
+        # Sort sources by relevance (sources with search terms in title or content first)
+        if sources:
+            def relevance_score(source):
+                text = source.get('text', '').lower()
+                title = source.get('metadata', {}).get('article_title', '').lower()
+                # Simple relevance scoring - prioritize sources with more content and relevant terms
+                score = len(text) + len(title) * 2  # Title gets double weight
+                return score
+            
+            sources.sort(key=relevance_score, reverse=True)
+            print(f"🔍 DEBUG: Sorted sources by relevance")
         
         print(f"🔍 DEBUG: Returning {len(sources)} RSS feed sources")
         return sources
@@ -423,11 +487,16 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
                         return datetime(1900, 1, 1)
                 
                 # Sort by date (most recent first)
-                sources.sort(key=lambda x: parse_date(x.get('metadata', {}).get('letter_date', '')), reverse=True)
+                def safe_sort_key(x):
+                    metadata = x.get('metadata', {})
+                    letter_date = metadata.get('letter_date', '') if metadata else ''
+                    return parse_date(letter_date)
+                
+                sources.sort(key=safe_sort_key, reverse=True)
                 print(f"🔍 DEBUG: Sorted sources by date, most recent first")
                 
                 # Show the sorted dates for debugging
-                sorted_dates = [parse_date(x.get('metadata', {}).get('letter_date', '')) for x in sources]
+                sorted_dates = [safe_sort_key(x) for x in sources]
                 print(f"🔍 DEBUG: Sorted dates: {[d.strftime('%Y-%m-%d') for d in sorted_dates[:5]]}")
             
             # Return all sources up to the limit
@@ -655,9 +724,9 @@ async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], s
             first_source = sources[0]
             collection_type = first_source.get('collection', 'general')
             
-            # Build context with collection-specific information (single best source)
-            context = f"\n\nRelevant source from {collection_type.replace('_', ' ').title()}:\n"
-            for i, source in enumerate(sources[:1], 1):
+            # Build context with collection-specific information (top 3 sources for better coverage)
+            context = f"\n\nRelevant sources from {collection_type.replace('_', ' ').title()}:\n"
+            for i, source in enumerate(sources[:3], 1):  # Take top 3 sources instead of just 1
                 metadata = source.get('metadata', {})
                 # Determine title per collection
                 if collection_type == "fda_warning_letters":
@@ -665,7 +734,8 @@ async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], s
                 else:
                     title = metadata.get('article_title', 'Unknown Title')
                 # Use the actual content field and provide a longer excerpt
-                content = source.get('content', '')[:1200]
+                content = source.get('content', '') or source.get('text', '')[:1200]
+                print(f"🔍 DEBUG: Chat function - content length: {len(content)}, preview: {content[:200]}...")
                 
                 # Add collection-specific details
                 if collection_type == "fda_warning_letters":
@@ -704,6 +774,8 @@ async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], s
                     date = metadata.get('published_date', 'Unknown Date')
                     context += f"{i}. {title} - Feed: {feed}, Date: {date}\n"
                     context += f"   {content}...\n\n"
+        
+        print(f"🔍 DEBUG: Final context being sent to AI: {context[:500]}...")
         
         # Build conversation messages
         messages = []
@@ -1197,6 +1269,121 @@ async def debug_warning_letters():
             "response_type": "N/A",
             "data_type": "N/A",
             "data_length": 0
+        }
+
+@app.get("/api/debug/vector-tables")
+async def debug_vector_tables():
+    """Debug endpoint to check if vector tables exist and are accessible."""
+    try:
+        print(f"🔍 DEBUG: Checking vector tables accessibility...")
+        
+        # Import Supabase client here to avoid circular imports
+        from auth.config import get_supabase_config
+        
+        # Get Supabase client
+        supabase_config = get_supabase_config()
+        if not supabase_config or not supabase_config.is_client_available():
+            return {
+                "success": False,
+                "error": "Supabase client not available",
+                "tables": {}
+            }
+        
+        supabase = supabase_config.get_client()
+        
+        # Test each table
+        tables_to_check = {
+            "rss_feed_vectors": "RSS feeds vector table (singular)",
+            "rss_feeds": "RSS feeds vector table (plural - fallback)",
+            "rss_feeds_gold": "RSS feeds summary table", 
+            "warning_letters_vectors": "FDA warning letters vector table",
+            "warning_letters_analytics": "FDA warning letters summary table"
+        }
+        
+        results = {}
+        
+        for table_name, description in tables_to_check.items():
+            try:
+                print(f"🔍 DEBUG: Testing table: {table_name}")
+                
+                # Try to query the table with a small limit
+                response = supabase.table(table_name).select('*').limit(1).execute()
+                
+                if hasattr(response, 'data'):
+                    data = response.data
+                else:
+                    data = response.get('data', [])
+                
+                # Get table info
+                table_info = {
+                    "exists": True,
+                    "accessible": True,
+                    "row_count": len(data),
+                    "sample_data": data[0] if data else None,
+                    "description": description
+                }
+                
+                # Try to get column info by examining sample data
+                if data:
+                    table_info["columns"] = list(data[0].keys()) if data[0] else []
+                else:
+                    # Try a different approach to get column info
+                    try:
+                        # Query with specific fields to see what's available
+                        test_response = supabase.table(table_name).select('*').limit(0).execute()
+                        table_info["columns"] = "Unknown - no data in table"
+                    except:
+                        table_info["columns"] = "Unknown - cannot determine"
+                
+                results[table_name] = table_info
+                print(f"✅ DEBUG: Table {table_name} is accessible")
+                
+            except Exception as table_error:
+                print(f"❌ DEBUG: Table {table_name} error: {table_error}")
+                results[table_name] = {
+                    "exists": False,
+                    "accessible": False,
+                    "error": str(table_error),
+                    "description": description,
+                    "columns": []
+                }
+        
+        # Check for pgvector extension
+        pgvector_available = False
+        try:
+            # Try to query a vector column if any table has one
+            for table_name in ["rss_feed_vectors", "rss_feeds", "warning_letters_vectors"]:
+                if results.get(table_name, {}).get("accessible", False):
+                    try:
+                        # Try to query a vector column
+                        response = supabase.table(table_name).select('text_vector').limit(1).execute()
+                        pgvector_available = True
+                        break
+                    except:
+                        continue
+        except:
+            pass
+        
+        return {
+            "success": True,
+            "tables": results,
+            "pgvector_available": pgvector_available,
+            "recommendations": {
+                "vector_tables_missing": not (results.get("rss_feed_vectors", {}).get("accessible", False) and 
+                                            results.get("warning_letters_vectors", {}).get("accessible", False)),
+                "summary_tables_available": (results.get("rss_feeds_gold", {}).get("accessible", False) and 
+                                           results.get("warning_letters_analytics", {}).get("accessible", False))
+            }
+        }
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error checking vector tables: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "tables": {}
         }
 
 # Auth endpoints are handled by auth/routes.py router
