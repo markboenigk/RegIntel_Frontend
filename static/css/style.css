@@ -817,6 +817,33 @@ input[type="number"] {
     font-size: 0.85rem;
 }
 
+/* Ensure consistent date styling across all tables */
+.info-table td:nth-child(1) strong {
+    color: #667eea !important;
+    font-weight: 500;
+}
+
+/* Force override any red color styling for dates */
+.info-table td:nth-child(1),
+.info-table td:nth-child(1) strong,
+.info-table td:nth-child(1) * {
+    color: #667eea !important;
+}
+
+/* Specific overrides for FDA Warning Letters table dates */
+#fdaWarningLettersTable td:nth-child(1),
+#fdaWarningLettersTable td:nth-child(1) strong,
+#fdaWarningLettersTable td:nth-child(1) * {
+    color: #667eea !important;
+}
+
+/* Specific overrides for RSS Feeds table dates */
+#recentNewsTable td:nth-child(1),
+#recentNewsTable td:nth-child(1) strong,
+#recentNewsTable td:nth-child(1) * {
+    color: #667eea !important;
+}
+
 .info-table td:nth-child(2) {
     color: #1d1d1f !important;
     font-weight: 600;
