@@ -97,7 +97,7 @@ async def get_embedding(text: str) -> List[float]:
         print(f"Error getting embedding: {e}")
         return []
 
-async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int, is_latest_query: bool, is_date_query: bool = False) -> List[Dict[str, Any]]:
+async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int, is_latest_query: bool, is_date_query: bool = False, is_company_query: bool = False) -> List[Dict[str, Any]]:
     """Search FDA warning letters using Supabase pgvector."""
     try:
         from auth.config import get_supabase_config
@@ -133,6 +133,11 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                         print(f"🔍 DEBUG: Date query detected, selecting only date field from vector table")
                         response = supabase.table('warning_letters_vectors').select(
                             'letter_date'
+                        ).order('letter_date', desc=True).limit(1).execute()
+                    elif is_company_query:
+                        print(f"🔍 DEBUG: Company query detected, selecting only company and date fields from vector table")
+                        response = supabase.table('warning_letters_vectors').select(
+                            'company_name,letter_date'
                         ).order('letter_date', desc=True).limit(1).execute()
                     else:
                         print(f"🔍 DEBUG: Full latest query, selecting key fields from vector table")
@@ -193,7 +198,7 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                     }
                     text_content = row.get('summary', 'No summary available')
                 elif is_date_query and 'letter_date' in row:
-                    # Date-only query from analytics table
+                    # Date-only query from vector table
                     metadata = {
                         "company_name": "Latest Warning Letter",
                         "letter_date": row.get('letter_date', 'Unknown Date'),
@@ -206,6 +211,20 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                         "regulatory_consequences": []
                     }
                     text_content = f"The latest FDA warning letter was issued on {row.get('letter_date', 'Unknown Date')}."
+                elif is_company_query and 'company_name' in row:
+                    # Company-only query from vector table
+                    metadata = {
+                        "company_name": row.get('company_name', 'Unknown Company'),
+                        "letter_date": row.get('letter_date', 'Unknown Date'),
+                        "chunk_type": "warning_letter",
+                        "chunk_id": f"company_{row.get('company_name', 'unknown')}",
+                        "warning_letter_id": "latest_company",
+                        "violations": [],
+                        "required_actions": [],
+                        "systemic_issues": [],
+                        "regulatory_consequences": []
+                    }
+                    text_content = f"The latest FDA warning letter was issued to {row.get('company_name', 'Unknown Company')} on {row.get('letter_date', 'Unknown Date')}."
                 else:
                     # Vector table schema
                     metadata = {
@@ -393,6 +412,10 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
         date_keywords = ['when', 'date', 'issued', 'published']
         is_date_query = any(keyword in query.lower() for keyword in date_keywords)
         
+        # Check if this is a company-only query (faster processing)
+        company_keywords = ['which company', 'what company', 'who', 'company name']
+        is_company_query = any(keyword in query.lower() for keyword in company_keywords)
+        
         # Increase search limit for latest queries to get more results to sort
         search_limit = top_k * 3 if is_latest_query and target_collection == "fda_warning_letters" else top_k
         if is_latest_query and target_collection == "fda_warning_letters":
@@ -409,7 +432,7 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
 
         # Use Supabase pgvector for search
         if target_collection == "fda_warning_letters":
-            return await search_fda_warning_letters_pgvector(query_embedding, search_limit, is_latest_query, is_date_query)
+            return await search_fda_warning_letters_pgvector(query_embedding, search_limit, is_latest_query, is_date_query, is_company_query)
         else:
             return await search_rss_feeds_pgvector(query_embedding, search_limit)
         
