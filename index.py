@@ -118,8 +118,18 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
             }).execute()
         except Exception as rpc_error:
             print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
-            # Fallback to direct query with limit to avoid performance issues
-            response = supabase.table('warning_letters_vectors').select('*').limit(search_limit * 2).execute()
+            # For "latest" queries, use the analytics table which is likely smaller and faster
+            if is_latest_query:
+                print(f"🔍 DEBUG: Using analytics table for latest query")
+                response = supabase.table('warning_letters_analytics').select(
+                    'letter_date,company_name,summary'
+                ).order('letter_date', desc=True).limit(search_limit).execute()
+            else:
+                # Fallback to vector table with limited fields for better performance
+                print(f"🔍 DEBUG: Using vector table with limited fields")
+                response = supabase.table('warning_letters_vectors').select(
+                    'text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id,violations,required_actions,systemic_issues,regulatory_consequences'
+                ).limit(search_limit).execute()
         
         if not response.data:
             print("❌ DEBUG: No data returned from pgvector search")
@@ -139,21 +149,40 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                 
                 # Debug: Check the actual data structure
                 print(f"🔍 DEBUG: Row data - letter_date: {row.get('letter_date')}, type: {type(row.get('letter_date'))}")
+                print(f"🔍 DEBUG: Available fields: {list(row.keys())}")
                 
-                metadata = {
-                    "company_name": row.get('company_name', 'Unknown Company'),
-                    "letter_date": row.get('letter_date', 'Unknown Date'),
-                    "chunk_type": row.get('chunk_type', 'Unknown Type'),
-                    "chunk_id": row.get('chunk_id', 'Unknown Chunk'),
-                    "warning_letter_id": row.get('warning_letter_id', 'Unknown ID'),
-                    "violations": row.get('violations', '{}'),
-                    "required_actions": row.get('required_actions', '{}'),
-                    "systemic_issues": row.get('systemic_issues', '{}'),
-                    "regulatory_consequences": row.get('regulatory_consequences', '{}')
-                }
+                # Handle different table schemas (analytics vs vectors)
+                if 'summary' in row:
+                    # Analytics table schema
+                    metadata = {
+                        "company_name": row.get('company_name', 'Unknown Company'),
+                        "letter_date": row.get('letter_date', 'Unknown Date'),
+                        "chunk_type": "warning_letter",
+                        "chunk_id": f"analytics_{row.get('letter_date', 'unknown')}",
+                        "warning_letter_id": f"analytics_{row.get('company_name', 'unknown')}",
+                        "violations": [],
+                        "required_actions": [],
+                        "systemic_issues": [],
+                        "regulatory_consequences": []
+                    }
+                    text_content = row.get('summary', 'No summary available')
+                else:
+                    # Vector table schema
+                    metadata = {
+                        "company_name": row.get('company_name', 'Unknown Company'),
+                        "letter_date": row.get('letter_date', 'Unknown Date'),
+                        "chunk_type": row.get('chunk_type', 'Unknown Type'),
+                        "chunk_id": row.get('chunk_id', 'Unknown Chunk'),
+                        "warning_letter_id": row.get('warning_letter_id', 'Unknown ID'),
+                        "violations": row.get('violations', '{}'),
+                        "required_actions": row.get('required_actions', '{}'),
+                        "systemic_issues": row.get('systemic_issues', '{}'),
+                        "regulatory_consequences": row.get('regulatory_consequences', '{}')
+                    }
+                    text_content = row.get('text_content', 'No content available')
                 
                 source = {
-                    "text": row.get('text_content', ''),
+                    "text": text_content,
                     "metadata": metadata
                 }
                 sources.append(source)
@@ -905,7 +934,7 @@ async def chat_with_collection(collection: str, request: ChatRequest):
         
         # Create tasks for search and chat
         search_task = asyncio.create_task(search_similar_documents(request.message, collection))
-        search_sources = await asyncio.wait_for(search_task, timeout=25.0)
+        search_sources = await asyncio.wait_for(search_task, timeout=15.0)
         
         print(f"🔍 DEBUG: Found {len(search_sources)} sources")
         
@@ -916,7 +945,7 @@ async def chat_with_collection(collection: str, request: ChatRequest):
         
         # Get AI response with timeout
         chat_task = asyncio.create_task(chat_with_gpt(request.message, history, search_sources))
-        response = await asyncio.wait_for(chat_task, timeout=20.0)
+        response = await asyncio.wait_for(chat_task, timeout=10.0)
         
         print(f"🔍 DEBUG: Generated response: {response[:100]}...")
         
