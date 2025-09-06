@@ -97,7 +97,7 @@ async def get_embedding(text: str) -> List[float]:
         print(f"Error getting embedding: {e}")
         return []
 
-async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int, is_latest_query: bool) -> List[Dict[str, Any]]:
+async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int, is_latest_query: bool, is_date_query: bool = False) -> List[Dict[str, Any]]:
     """Search FDA warning letters using Supabase pgvector."""
     try:
         from auth.config import get_supabase_config
@@ -121,9 +121,19 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
             # For "latest" queries, use the analytics table which is likely smaller and faster
             if is_latest_query:
                 print(f"🔍 DEBUG: Using analytics table for latest query")
-                response = supabase.table('warning_letters_analytics').select(
-                    'letter_date,company_name,summary'
-                ).order('letter_date', desc=True).limit(search_limit).execute()
+                # Use a much smaller limit for latest queries to avoid timeout
+                latest_limit = min(search_limit, 5)  # Cap at 5 for performance
+                
+                # For date queries, only select the date field for maximum speed
+                if is_date_query:
+                    print(f"🔍 DEBUG: Date query detected, selecting only date field")
+                    response = supabase.table('warning_letters_analytics').select(
+                        'letter_date'
+                    ).order('letter_date', desc=True).limit(1).execute()
+                else:
+                    response = supabase.table('warning_letters_analytics').select(
+                        'letter_date,company_name,summary'
+                    ).order('letter_date', desc=True).limit(latest_limit).execute()
             else:
                 # Fallback to vector table with limited fields for better performance
                 print(f"🔍 DEBUG: Using vector table with limited fields")
@@ -166,6 +176,20 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                         "regulatory_consequences": []
                     }
                     text_content = row.get('summary', 'No summary available')
+                elif is_date_query and 'letter_date' in row:
+                    # Date-only query from analytics table
+                    metadata = {
+                        "company_name": "Latest Warning Letter",
+                        "letter_date": row.get('letter_date', 'Unknown Date'),
+                        "chunk_type": "warning_letter",
+                        "chunk_id": f"date_{row.get('letter_date', 'unknown')}",
+                        "warning_letter_id": "latest_date",
+                        "violations": [],
+                        "required_actions": [],
+                        "systemic_issues": [],
+                        "regulatory_consequences": []
+                    }
+                    text_content = f"The latest FDA warning letter was issued on {row.get('letter_date', 'Unknown Date')}."
                 else:
                     # Vector table schema
                     metadata = {
@@ -349,6 +373,10 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
         latest_keywords = ['latest', 'most recent', 'newest', 'recent', 'last']
         is_latest_query = any(keyword in query.lower() for keyword in latest_keywords)
         
+        # Check if this is a date-only query (faster processing)
+        date_keywords = ['when', 'date', 'issued', 'published']
+        is_date_query = any(keyword in query.lower() for keyword in date_keywords)
+        
         # Increase search limit for latest queries to get more results to sort
         search_limit = top_k * 3 if is_latest_query and target_collection == "fda_warning_letters" else top_k
         if is_latest_query and target_collection == "fda_warning_letters":
@@ -365,7 +393,7 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
 
         # Use Supabase pgvector for search
         if target_collection == "fda_warning_letters":
-            return await search_fda_warning_letters_pgvector(query_embedding, search_limit, is_latest_query)
+            return await search_fda_warning_letters_pgvector(query_embedding, search_limit, is_latest_query, is_date_query)
         else:
             return await search_rss_feeds_pgvector(query_embedding, search_limit)
         
