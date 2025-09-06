@@ -135,9 +135,9 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                             'letter_date'
                         ).order('letter_date', desc=True).limit(1).execute()
                     elif is_company_query:
-                        print(f"🔍 DEBUG: Company query detected, selecting only company and date fields from vector table")
+                        print(f"🔍 DEBUG: Company query detected, selecting company, date, and content fields from vector table")
                         response = supabase.table('warning_letters_vectors').select(
-                            'company_name,letter_date'
+                            'company_name,letter_date,text_content'
                         ).order('letter_date', desc=True).limit(1).execute()
                     else:
                         print(f"🔍 DEBUG: Full latest query, selecting key fields from vector table")
@@ -212,7 +212,7 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                     }
                     text_content = f"The latest FDA warning letter was issued on {row.get('letter_date', 'Unknown Date')}."
                 elif is_company_query and 'company_name' in row:
-                    # Company-only query from vector table
+                    # Company query from vector table with content
                     metadata = {
                         "company_name": row.get('company_name', 'Unknown Company'),
                         "letter_date": row.get('letter_date', 'Unknown Date'),
@@ -224,7 +224,8 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
                         "systemic_issues": [],
                         "regulatory_consequences": []
                     }
-                    text_content = f"The latest FDA warning letter was issued to {row.get('company_name', 'Unknown Company')} on {row.get('letter_date', 'Unknown Date')}."
+                    # Use the actual text content from the database for better AI responses
+                    text_content = row.get('text_content', f"The latest FDA warning letter was issued to {row.get('company_name', 'Unknown Company')} on {row.get('letter_date', 'Unknown Date')}.")
                 else:
                     # Vector table schema
                     metadata = {
