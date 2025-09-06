@@ -217,7 +217,28 @@
             </div>
         </div>
     </div>
+    <!-- Weekly Warning Letters Chart -->
+    <div class="info-tables-container">
+        <div class="info-table-section">
+            <h3><i class="fas fa-chart-bar"></i> Weekly Warning Letters Trend</h3>
+            <div class="chart-container">
+                <div style="margin-bottom: 15px; text-align: right;">
+                    <button id="refreshChartBtn" class="action-button"
+                        style="background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+                        <i class="fas fa-sync"></i> Refresh Chart </button>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="weeklyChart" width="400" height="200"></canvas>
+                </div>
+                <div id="chartError" class="chart-error" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Failed to load chart data</span>
+                </div>
+            </div>
+        </div>
     </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{{ url_for('static', path='/js/chat.js') }}?v=2"></script>
     <script>
         // Check authentication status on page load and update UI
@@ -286,10 +307,162 @@
             }
         }
 
+        // Chart functionality
+        let weeklyChart = null;
+
+        async function loadWeeklyChart() {
+            try {
+                console.log('📊 Loading weekly chart data...');
+                const response = await fetch('/api/warning-letters/weekly-stats');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('📊 Chart data loaded successfully:', data);
+
+                    if (data.success && data.weekly_stats) {
+                        console.log('📊 Rendering chart with data:', data.weekly_stats);
+                        renderWeeklyChart(data.weekly_stats);
+                        hideChartError();
+                    } else {
+                        console.error('❌ No data available for chart');
+                        showChartError('No data available for chart');
+                    }
+                } else {
+                    console.error('❌ Failed to load chart data:', response.status);
+                    showChartError('Failed to load chart data');
+                }
+            } catch (error) {
+                console.error('❌ Error loading chart data:', error);
+                showChartError('Network error loading chart data');
+            }
+        }
+
+        function renderWeeklyChart(weeklyStats) {
+            console.log('📊 Starting chart rendering...');
+            const canvas = document.getElementById('weeklyChart');
+            if (!canvas) {
+                console.error('❌ Chart canvas not found!');
+                showChartError('Chart canvas not found');
+                return;
+            }
+
+            const ctx = canvas.getContext('2d');
+            console.log('📊 Canvas context obtained');
+
+            // Destroy existing chart if it exists
+            if (weeklyChart) {
+                console.log('📊 Destroying existing chart');
+                weeklyChart.destroy();
+            }
+
+            const labels = weeklyStats.map(stat => stat.week_display);
+            const data = weeklyStats.map(stat => stat.count);
+            console.log('📊 Chart labels:', labels);
+            console.log('📊 Chart data:', data);
+
+            weeklyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Warning Letters',
+                        data: data,
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 2,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20,
+                                font: {
+                                    family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+                                    size: 14,
+                                    weight: '500'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(102, 126, 234, 1)',
+                            borderWidth: 1,
+                            cornerRadius: 8,
+                            displayColors: true,
+                            callbacks: {
+                                title: function (context) {
+                                    return context[0].label;
+                                },
+                                label: function (context) {
+                                    return `Warning Letters: ${context.parsed.y}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1,
+                                font: {
+                                    family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+                                    size: 12
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)',
+                                drawBorder: false
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: {
+                                    family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+                                    size: 12
+                                }
+                            },
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+
+            console.log('📊 Chart created successfully!');
+        }
+
+        function showChartError(message) {
+            const errorDiv = document.getElementById('chartError');
+            const errorSpan = errorDiv.querySelector('span');
+            errorSpan.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideChartError() {
+            const errorDiv = document.getElementById('chartError');
+            errorDiv.style.display = 'none';
+        }
+
         // Check auth on page load
         document.addEventListener('DOMContentLoaded', () => {
             checkAuthAndUpdateUI();
             loadLatestRSSNews(); // Load RSS news on page load
+            loadWeeklyChart(); // Load weekly chart on page load
 
             // Add refresh button event listener
             const refreshRSSBtn = document.getElementById('refreshRSSBtn');
@@ -477,12 +650,16 @@
             // Add refresh button event listeners
             const refreshRSSBtn = document.getElementById('refreshRSSBtn');
             const refreshFDABtn = document.getElementById('refreshFDABtn');
+            const refreshChartBtn = document.getElementById('refreshChartBtn');
 
             if (refreshRSSBtn) {
                 refreshRSSBtn.addEventListener('click', loadLatestRSSNews);
             }
             if (refreshFDABtn) {
                 refreshFDABtn.addEventListener('click', loadFDAWarningLetters);
+            }
+            if (refreshChartBtn) {
+                refreshChartBtn.addEventListener('click', loadWeeklyChart);
             }
 
             const forceLogoutButton = document.getElementById('forceLogoutButton');

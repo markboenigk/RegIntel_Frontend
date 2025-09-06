@@ -820,6 +820,85 @@ async def get_latest_rss_feeds(limit: int = 10):
             "articles": []
         }
 
+@app.get("/api/warning-letters/weekly-stats", response_model=dict)
+async def get_weekly_warning_letter_stats():
+    """Get weekly warning letter statistics for the last 4 weeks"""
+    try:
+        print(f"📊 DEBUG: Fetching weekly warning letter statistics...")
+        
+        # Get Supabase client
+        from auth.config import get_supabase_config
+        supabase = get_supabase_config().get_client()
+        
+        # Query for weekly statistics
+        response = supabase.table('warning_letters_analytics').select('letter_date').execute()
+        
+        if not response.data:
+            print(f"❌ DEBUG: No data found in warning_letters_analytics table")
+            return {"success": False, "message": "No data found", "weekly_stats": []}
+        
+        print(f"📊 DEBUG: Found {len(response.data)} warning letters")
+        
+        # Process the data to get weekly counts
+        from collections import defaultdict
+        from datetime import datetime, timedelta
+        
+        weekly_counts = defaultdict(int)
+        
+        for letter in response.data:
+            letter_date = letter.get('letter_date')
+            if letter_date:
+                try:
+                    # Parse the date and get the week number
+                    date_obj = datetime.strptime(letter_date, '%Y-%m-%d')
+                    week_num = date_obj.isocalendar()[1]  # ISO week number
+                    year = date_obj.year
+                    week_key = f"{year}-W{week_num:02d}"
+                    weekly_counts[week_key] += 1
+                except Exception as e:
+                    print(f"⚠️ DEBUG: Error parsing date {letter_date}: {e}")
+                    continue
+        
+        # Get the last 4 weeks
+        current_date = datetime.now()
+        last_4_weeks = []
+        
+        for i in range(4):
+            week_date = current_date - timedelta(weeks=i)
+            week_num = week_date.isocalendar()[1]
+            year = week_date.year
+            week_key = f"{year}-W{week_num:02d}"
+            
+            count = weekly_counts.get(week_key, 0)
+            print(f"📊 DEBUG: Week {week_key} has count {count}")
+            # Only include weeks with data (count > 0)
+            if count > 0:
+                print(f"📊 DEBUG: Including week {week_key} with count {count}")
+                last_4_weeks.append({
+                    "week": week_key,
+                    "week_display": f"Week {week_num}, {year}",
+                    "count": count
+                })
+            else:
+                print(f"📊 DEBUG: Excluding week {week_key} with count {count}")
+        
+        # Sort by week chronologically (oldest first: Week 33, 34, 35)
+        last_4_weeks.sort(key=lambda x: x["week"])
+        
+        print(f"📊 DEBUG: Weekly stats: {last_4_weeks}")
+        
+        return {
+            "success": True,
+            "weekly_stats": last_4_weeks,
+            "total_weeks": len(last_4_weeks)
+        }
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error fetching weekly stats: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": f"Error fetching weekly stats: {str(e)}", "weekly_stats": []}
+
 @app.get("/api/warning-letters/latest")
 async def get_latest_warning_letters(limit: int = 10):
     """Get the most recent warning letters from Supabase warning_letter_analytics table."""
@@ -845,7 +924,7 @@ async def get_latest_warning_letters(limit: int = 10):
         
         # Query the warning_letter_analytics table for the most recent entries
         print(f"🔍 DEBUG: About to query Supabase for unique warning letters")
-        response = supabase.table('warning_letters_analytics').select(
+        response = supabase.table('warning_letterslike _analytics').select(
             'letter_date,company_name,summary'
         ).order('letter_date', desc=True).execute()  # Get all rows, we'll deduplicate and limit in Python
         
