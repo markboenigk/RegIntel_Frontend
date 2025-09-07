@@ -100,11 +100,26 @@ async def get_embedding(text: str) -> List[float]:
 async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int) -> List[Dict[str, Any]]:
     """Search FDA warning letters using Supabase pgvector."""
     try:
-        from auth.config import get_supabase_config
-        supabase = get_supabase_config().get_client()
+        # Use direct HTTP requests to Supabase REST API to bypass client issues
+        import os
+        import requests
         
-        print(f"🔍 DEBUG: Searching FDA warning letters with pgvector")
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        
+        if not supabase_url or not supabase_key:
+            print(f"❌ DEBUG: Supabase credentials not available")
+            return []
+        
+        print(f"🔍 DEBUG: Using direct HTTP approach to Supabase...")
         print(f"🔍 DEBUG: Search limit: {search_limit}")
+        
+        # Make direct HTTP request to Supabase REST API
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json"
+        }
         
         # Convert embedding to list format for pgvector
         embedding_list = [float(x) for x in query_embedding]
@@ -112,44 +127,44 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
         # Add timeout wrapper for Vercel
         import asyncio
         
-        async def execute_query():
-            # Use direct pgvector query (fallback if RPC function doesn't exist)
-            try:
-                print(f"🔍 DEBUG: Trying RPC function with embedding length: {len(embedding_list)}")
-                response = supabase.rpc('search_warning_letters', {
-                    'query_embedding': embedding_list,
-                    'match_threshold': 0.1,
-                    'match_count': search_limit
-                }).execute()
-                print(f"🔍 DEBUG: RPC function successful, got {len(response.data) if response.data else 0} results")
-            except Exception as rpc_error:
-                print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
-                # Use vector table with essential fields for all queries
-                print(f"🔍 DEBUG: Using vector table with essential fields")
-                response = supabase.table('warning_letters_vectors').select(
-                    'text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id'
-                ).order('letter_date', desc=True).limit(search_limit).execute()
-            
-            return response
-        
-        # Execute query with timeout
+        # Try RPC function first, then fallback to direct table query
         try:
-            response = await asyncio.wait_for(execute_query(), timeout=10.0)
-        except asyncio.TimeoutError:
-            print("❌ DEBUG: Query timed out after 10 seconds")
-            return []
+            print(f"🔍 DEBUG: Trying RPC function with embedding length: {len(embedding_list)}")
+            # Use RPC function for vector search
+            rpc_url = f"{supabase_url}/rest/v1/rpc/search_warning_letters"
+            rpc_payload = {
+                "query_embedding": embedding_list,
+                "match_threshold": 0.1,
+                "match_count": search_limit
+            }
+            
+            response = requests.post(rpc_url, headers=headers, json=rpc_payload)
+            if response.status_code == 200:
+                data = response.json()
+                print(f"🔍 DEBUG: RPC function successful, got {len(data) if data else 0} results")
+            else:
+                print(f"⚠️ DEBUG: RPC function failed with status {response.status_code}, using direct query")
+                raise Exception("RPC function not available")
+                
+        except Exception as rpc_error:
+            print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
+            # Use vector table with essential fields for all queries
+            print(f"🔍 DEBUG: Using vector table with essential fields")
+            table_url = f"{supabase_url}/rest/v1/warning_letters_vectors?select=text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id&order=letter_date.desc&limit={search_limit}"
+            
+            response = requests.get(table_url, headers=headers)
+            if response.status_code != 200:
+                print(f"❌ DEBUG: Table query failed with status {response.status_code}")
+                return []
+            
+            data = response.json()
+            if not data:
+                print("❌ DEBUG: No data returned from table search")
+                return []
         
-        if not response.data:
-            print("❌ DEBUG: No data returned from pgvector search")
-            return []
-        
-        print(f"🔍 DEBUG: Found {len(response.data)} results from pgvector")
-        if response.data:
-            print(f"🔍 DEBUG: First result - company: {response.data[0].get('company_name')}, date: {response.data[0].get('letter_date')}")
-            print(f"🔍 DEBUG: Sample text: {response.data[0].get('text_content', '')[:200]}...")
-        
+        # Process the results
         sources = []
-        for row in response.data:
+        for row in data:
             try:
                 # Parse the text_vector back to list if needed
                 text_vector = row.get('text_vector')
@@ -238,42 +253,77 @@ async def search_fda_warning_letters_pgvector(query_embedding: List[float], sear
 async def search_rss_feeds_pgvector(query_embedding: List[float], search_limit: int) -> List[Dict[str, Any]]:
     """Search RSS feeds using Supabase pgvector."""
     try:
-        from auth.config import get_supabase_config
-        supabase = get_supabase_config().get_client()
+        # Use direct HTTP requests to Supabase REST API to bypass client issues
+        import os
+        import requests
         
-        print(f"🔍 DEBUG: Searching RSS feeds with pgvector")
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        
+        if not supabase_url or not supabase_key:
+            print(f"❌ DEBUG: Supabase credentials not available")
+            return []
+        
+        print(f"🔍 DEBUG: Using direct HTTP approach to Supabase...")
         print(f"🔍 DEBUG: Search limit: {search_limit}")
+        
+        # Make direct HTTP request to Supabase REST API
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json"
+        }
         
         # Convert embedding to list format for pgvector
         embedding_list = [float(x) for x in query_embedding]
         
-        # Use direct pgvector query for RSS feeds (fallback if RPC function doesn't exist)
+        # Try RPC function first, then fallback to direct table query
         try:
-            response = supabase.rpc('search_rss_feeds', {
-                'query_embedding': embedding_list,
-                'match_threshold': 0.1,
-                'match_count': search_limit
-            }).execute()
+            print(f"🔍 DEBUG: Trying RSS RPC function with embedding length: {len(embedding_list)}")
+            # Use RPC function for vector search
+            rpc_url = f"{supabase_url}/rest/v1/rpc/search_rss_feeds"
+            rpc_payload = {
+                "query_embedding": embedding_list,
+                "match_threshold": 0.1,
+                "match_count": search_limit
+            }
+            
+            response = requests.post(rpc_url, headers=headers, json=rpc_payload)
+            if response.status_code == 200:
+                data = response.json()
+                print(f"🔍 DEBUG: RSS RPC function successful, got {len(data) if data else 0} results")
+            else:
+                print(f"⚠️ DEBUG: RSS RPC function failed with status {response.status_code}, using direct query")
+                raise Exception("RPC function not available")
+                
         except Exception as rpc_error:
             print(f"⚠️ DEBUG: RSS RPC function not available, using direct query: {rpc_error}")
             # Fallback to direct query - try rss_feed_vectors first, then rss_feeds_gold
             try:
-                response = supabase.table('rss_feed_vectors').select('*').limit(search_limit * 2).execute()
-                print(f"✅ DEBUG: Using rss_feed_vectors table")
+                table_url = f"{supabase_url}/rest/v1/rss_feed_vectors?limit={search_limit * 2}"
+                response = requests.get(table_url, headers=headers)
+                if response.status_code == 200:
+                    data = response.json()
+                    print(f"✅ DEBUG: Using rss_feed_vectors table")
+                else:
+                    raise Exception("rss_feed_vectors not accessible")
             except Exception as vector_error:
                 print(f"⚠️ DEBUG: rss_feed_vectors not accessible, using rss_feeds_gold: {vector_error}")
-                response = supabase.table('rss_feeds_gold').select(
-                    'article_feed_name,article_published_date,article_title,content_category'
-                ).limit(search_limit * 2).execute()
+                table_url = f"{supabase_url}/rest/v1/rss_feeds_gold?select=article_feed_name,article_published_date,article_title,content_category&limit={search_limit * 2}"
+                response = requests.get(table_url, headers=headers)
+                if response.status_code != 200:
+                    print(f"❌ DEBUG: RSS table query failed with status {response.status_code}")
+                    return []
+                data = response.json()
         
-        if not response.data:
-            print("❌ DEBUG: No data returned from RSS pgvector search")
+        if not data:
+            print("❌ DEBUG: No data returned from RSS search")
             return []
         
-        print(f"🔍 DEBUG: Found {len(response.data)} RSS results from pgvector")
+        print(f"🔍 DEBUG: Found {len(data)} RSS results")
         
         sources = []
-        for row in response.data:
+        for row in data:
             try:
                 # Debug: Check the actual data structure and available fields
                 print(f"🔍 DEBUG: RSS Row data - article_title: {row.get('article_title')}, published_date: {row.get('article_published_date')}")
@@ -877,7 +927,7 @@ async def chat_with_gpt(message: str, conversation_history: List[ChatMessage], s
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    """Serve the main chat interface."""
+    """Serve the warning letters page with chat interface."""
     try:
         # Try to get current user from auth middleware
         from auth.middleware import get_optional_user
@@ -890,6 +940,25 @@ async def root(request: Request):
     except Exception as e:
         print(f"Error getting user for index page: {e}")
         return templates.TemplateResponse("index.html", {
+            "request": request,
+            "user": None
+        })
+
+@app.get("/rss-feeds", response_class=HTMLResponse)
+async def rss_feeds_page(request: Request):
+    """Serve the RSS feeds page without chat interface."""
+    try:
+        # Try to get current user from auth middleware
+        from auth.middleware import get_optional_user
+        current_user = await get_optional_user(request)
+        
+        return templates.TemplateResponse("rss_feeds.html", {
+            "request": request,
+            "user": current_user
+        })
+    except Exception as e:
+        print(f"Error getting user for RSS feeds page: {e}")
+        return templates.TemplateResponse("rss_feeds.html", {
             "request": request,
             "user": None
         })
@@ -1000,13 +1069,15 @@ async def get_latest_rss_feeds(limit: int = 10):
     try:
         print(f"📰 DEBUG: Fetching latest {limit} RSS feeds from Supabase")
         
-        # Import Supabase client here to avoid circular imports
-        from auth.config import get_supabase_config
+        # Use direct HTTP requests to Supabase REST API to bypass client issues
+        import os
+        import requests
         
-        # Get Supabase client
-        supabase_config = get_supabase_config()
-        if not supabase_config or not supabase_config.is_client_available():
-            error_msg = "Supabase client not available - check configuration and environment variables"
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        
+        if not supabase_url or not supabase_key:
+            error_msg = "Supabase credentials not available"
             print(f"❌ DEBUG: {error_msg}")
             return {
                 "success": False,
@@ -1014,27 +1085,36 @@ async def get_latest_rss_feeds(limit: int = 10):
                 "articles": []
             }
         
-        supabase = supabase_config.get_client()
+        print(f"📰 DEBUG: Using direct HTTP approach to Supabase...")
+        
+        # Make direct HTTP request to Supabase REST API
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json"
+        }
         
         # Query the rss_feeds_gold table for the most recent entries
         print(f"📰 DEBUG: About to query Supabase with limit={limit}")
-        response = supabase.table('rss_feeds_gold').select(
-            'article_feed_name,article_published_date,article_title,content_category'
-        ).order('article_published_date', desc=True).limit(limit).execute()
+        url = f"{supabase_url}/rest/v1/rss_feeds_gold?select=article_feed_name,article_published_date,article_title,content_category&order=article_published_date.desc&limit={limit}"
+        response = requests.get(url, headers=headers)
         
-        print(f"📰 DEBUG: Supabase response received")
-        if hasattr(response, 'data'):
-            articles = response.data
-            print(f"📰 DEBUG: Response has 'data' attribute, length: {len(articles)}")
-        else:
-            articles = response.get('data', [])
-            print(f"📰 DEBUG: Response uses .get('data'), length: {len(articles)}")
+        if response.status_code != 200:
+            print(f"❌ DEBUG: HTTP request failed with status {response.status_code}: {response.text}")
+            return {
+                "success": False,
+                "error": f"HTTP request failed: {response.status_code}",
+                "articles": []
+            }
         
-        print(f"📰 DEBUG: Found {len(articles)} RSS articles from Supabase")
+        data = response.json()
+        
+        print(f"📰 DEBUG: HTTP response received")
+        print(f"📰 DEBUG: Found {len(data)} RSS articles from Supabase")
         
         # Filter out articles with missing required data
         valid_articles = []
-        for article in articles:
+        for article in data:
             if (article.get('article_feed_name') and 
                 article.get('article_published_date') and
                 article.get('article_title')):
@@ -1065,18 +1145,42 @@ async def get_weekly_warning_letter_stats():
     try:
         print(f"📊 DEBUG: Fetching weekly warning letter statistics...")
         
-        # Get Supabase client
-        from auth.config import get_supabase_config
-        supabase = get_supabase_config().get_client()
+        # Use direct HTTP requests to Supabase REST API to bypass client issues
+        import os
+        import requests
+        
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        
+        if not supabase_url or not supabase_key:
+            error_msg = "Supabase credentials not available"
+            print(f"❌ DEBUG: {error_msg}")
+            return {"success": False, "message": error_msg, "weekly_stats": []}
+        
+        print(f"📊 DEBUG: Using direct HTTP approach to Supabase...")
+        
+        # Make direct HTTP request to Supabase REST API
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json"
+        }
         
         # Query for weekly statistics
-        response = supabase.table('warning_letters_analytics').select('letter_date').execute()
+        url = f"{supabase_url}/rest/v1/warning_letters_analytics?select=letter_date"
+        response = requests.get(url, headers=headers)
         
-        if not response.data:
+        if response.status_code != 200:
+            print(f"❌ DEBUG: HTTP request failed with status {response.status_code}: {response.text}")
+            return {"success": False, "message": f"HTTP request failed: {response.status_code}", "weekly_stats": []}
+        
+        data = response.json()
+        
+        if not data:
             print(f"❌ DEBUG: No data found in warning_letters_analytics table")
             return {"success": False, "message": "No data found", "weekly_stats": []}
         
-        print(f"📊 DEBUG: Found {len(response.data)} warning letters")
+        print(f"📊 DEBUG: Found {len(data)} warning letters")
         
         # Process the data to get weekly counts
         from collections import defaultdict
@@ -1084,7 +1188,7 @@ async def get_weekly_warning_letter_stats():
         
         weekly_counts = defaultdict(int)
         
-        for letter in response.data:
+        for letter in data:
             letter_date = letter.get('letter_date')
             if letter_date:
                 try:
@@ -1098,11 +1202,12 @@ async def get_weekly_warning_letter_stats():
                     print(f"⚠️ DEBUG: Error parsing date {letter_date}: {e}")
                     continue
         
-        # Get the last 4 weeks
+        # Get the last 5 weeks, then filter to show only weeks with data (up to 4 weeks)
         current_date = datetime.now()
-        last_4_weeks = []
+        all_weeks = []
         
-        for i in range(4):
+        # Get last 5 weeks
+        for i in range(5):
             week_date = current_date - timedelta(weeks=i)
             week_num = week_date.isocalendar()[1]
             year = week_date.year
@@ -1110,26 +1215,30 @@ async def get_weekly_warning_letter_stats():
             
             count = weekly_counts.get(week_key, 0)
             print(f"📊 DEBUG: Week {week_key} has count {count}")
-            # Only include weeks with data (count > 0)
-            if count > 0:
-                print(f"📊 DEBUG: Including week {week_key} with count {count}")
-                last_4_weeks.append({
-                    "week": week_key,
-                    "week_display": f"Week {week_num}, {year}",
-                    "count": count
-                })
-            else:
-                print(f"📊 DEBUG: Excluding week {week_key} with count {count}")
+            
+            all_weeks.append({
+                "week": week_key,
+                "week_display": f"Week {week_num} {year}",
+                "count": count
+            })
+        
+        print(f"📊 DEBUG: All weeks: {[w['week'] for w in all_weeks]}")
+        
+        # Filter to only include weeks with data (count > 0), up to 3 weeks
+        weeks_with_data = [week for week in all_weeks if week["count"] > 0]
+        last_3_weeks = weeks_with_data[:3]  # Take up to 3 weeks with data
+        
+        print(f"📊 DEBUG: Found {len(weeks_with_data)} weeks with data, showing {len(last_3_weeks)} weeks")
         
         # Sort by week chronologically (oldest first: Week 33, 34, 35)
-        last_4_weeks.sort(key=lambda x: x["week"])
+        last_3_weeks.sort(key=lambda x: x["week"])
         
-        print(f"📊 DEBUG: Weekly stats: {last_4_weeks}")
+        print(f"📊 DEBUG: Weekly stats: {last_3_weeks}")
         
         return {
             "success": True,
-            "weekly_stats": last_4_weeks,
-            "total_weeks": len(last_4_weeks)
+            "weekly_stats": last_3_weeks,
+            "total_weeks": len(last_3_weeks)
         }
         
     except Exception as e:
@@ -1138,19 +1247,112 @@ async def get_weekly_warning_letter_stats():
         traceback.print_exc()
         return {"success": False, "message": f"Error fetching weekly stats: {str(e)}", "weekly_stats": []}
 
+@app.get("/api/warning-letters/weekly-top-actions")
+async def get_weekly_top_actions():
+    """Get weekly top 3 action categories for each week"""
+    try:
+        print(f"🚨🚨🚨 UPDATED CODE - SQL FUNCTION VERSION 🚨🚨🚨")
+        print(f"🏆 DEBUG: Fetching weekly top actions...")
+        
+        # Use direct HTTP requests to Supabase REST API to bypass client issues
+        import os
+        import requests
+        
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        
+        if not supabase_url or not supabase_key:
+            error_msg = "Supabase credentials not available"
+            print(f"❌ DEBUG: {error_msg}")
+            return {"success": False, "message": error_msg, "top_actions": []}
+        
+        print(f"🏆 DEBUG: Using direct HTTP approach to Supabase...")
+        
+        # Make direct HTTP request to Supabase REST API
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # Use the SQL function to get weekly top actions (properly filtered to recent weeks)
+        url = f"{supabase_url}/rest/v1/rpc/get_weekly_top_actions"
+        print(f"🏆 DEBUG: Calling SQL function at: {url}")
+        response = requests.post(url, headers=headers, json={})
+        
+        print(f"🏆 DEBUG: SQL function response status: {response.status_code}")
+        print(f"🏆 DEBUG: SQL function response text: {response.text[:500]}...")
+        
+        if response.status_code != 200:
+            print(f"❌ DEBUG: HTTP request failed with status {response.status_code}: {response.text}")
+            return {"success": False, "message": f"HTTP request failed: {response.status_code}", "top_actions": []}
+        
+        data = response.json()
+        
+        if not data:
+            print(f"❌ DEBUG: No data found from get_weekly_top_actions function")
+            return {"success": False, "message": "No data found", "top_actions": []}
+        
+        print(f"🏆 DEBUG: Found {len(data)} top actions records from SQL function")
+        print(f"🏆 DEBUG: Sample record: {data[0] if data else 'No data'}")
+        
+        # Process the SQL function results
+        top_actions = []
+        for record in data:
+            week_num = record.get('week_num')
+            action_category = record.get('action_category')
+            action_count = record.get('action_count')
+            
+            if week_num and action_category and action_count is not None:
+                # The SQL function already provides the rank via ROW_NUMBER(), so we can use it directly
+                # Find the rank for this week and category from the data
+                week_actions = [r for r in data if r.get('week_num') == week_num]
+                week_actions_sorted = sorted(week_actions, key=lambda x: x.get('action_count', 0), reverse=True)
+                
+                rank = next((i + 1 for i, r in enumerate(week_actions_sorted) if r.get('action_category') == action_category), 1)
+                
+                # Get the year for this week number (assuming current year for now)
+                from datetime import datetime
+                current_year = datetime.now().year
+                
+                top_actions.append({
+                    "week_num": week_num,
+                    "week_display": f"Week {week_num} {current_year}",
+                    "action_category": action_category,
+                    "action_count": action_count,
+                    "rank": rank
+                })
+        
+        # Sort by week number (chronological order - oldest first)
+        top_actions.sort(key=lambda x: x["week_num"])
+        
+        print(f"🏆 DEBUG: Processed {len(top_actions)} top actions records")
+        return {
+            "success": True,
+            "top_actions": top_actions
+        }
+        
+    except Exception as e:
+        print(f"❌ DEBUG: Error fetching weekly top actions: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "message": f"Error fetching weekly top actions: {str(e)}", "top_actions": []}
+
 @app.get("/api/warning-letters/latest")
 async def get_latest_warning_letters(limit: int = 10):
     """Get the most recent warning letters from Supabase warning_letter_analytics table."""
     try:
         print(f"🔍 DEBUG: Fetching latest {limit} warning letters from Supabase")
         
-        # Import Supabase client here to avoid circular imports
-        from auth.config import get_supabase_config
+        # Use direct HTTP requests to Supabase REST API to bypass client issues
+        import os
+        import requests
         
-        # Get Supabase client
-        supabase_config = get_supabase_config()
-        if not supabase_config or not supabase_config.is_client_available():
-            error_msg = "Supabase client not available - check configuration and environment variables"
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        
+        if not supabase_url or not supabase_key:
+            error_msg = "Supabase credentials not available"
             print(f"❌ DEBUG: {error_msg}")
             return {
                 "success": False,
@@ -1159,22 +1361,32 @@ async def get_latest_warning_letters(limit: int = 10):
                 "source_table": "error"
             }
         
-        supabase = supabase_config.get_client()
+        print(f"🔍 DEBUG: Using direct HTTP approach to Supabase...")
+        
+        # Make direct HTTP request to Supabase REST API
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json"
+        }
         
         # Query the warning_letter_analytics table for the most recent entries
         print(f"🔍 DEBUG: About to query Supabase for unique warning letters")
-        response = supabase.table('warning_letters_analytics').select(
-            'letter_date,company_name,summary'
-        ).order('letter_date', desc=True).execute()  # Get all rows, we'll deduplicate and limit in Python
+        url = f"{supabase_url}/rest/v1/warning_letters_analytics?select=letter_date,company_name,summary&order=letter_date.desc"
+        response = requests.get(url, headers=headers)
         
-        print(f"🔍 DEBUG: Supabase response received")
-        if hasattr(response, 'data'):
-            warning_letters = response.data
-            print(f"🔍 DEBUG: Response has 'data' attribute, length: {len(warning_letters)}")
-        else:
-            warning_letters = response.get('data', [])
-            print(f"🔍 DEBUG: Response uses .get('data'), length: {len(warning_letters)}")
+        if response.status_code != 200:
+            print(f"❌ DEBUG: HTTP request failed with status {response.status_code}: {response.text}")
+            return {
+                "success": False,
+                "error": f"HTTP request failed: {response.status_code}",
+                "warning_letters": [],
+                "source_table": "error"
+            }
         
+        warning_letters = response.json()
+        
+        print(f"🔍 DEBUG: HTTP response received")
         print(f"🔍 DEBUG: Found {len(warning_letters)} total warning letters from Supabase")
         
         # Deduplicate the warning letters based on company_name and letter_date combination

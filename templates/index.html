@@ -9,6 +9,12 @@
     <link
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
         rel="stylesheet">
+    <!-- Fallback Font Awesome CDN -->
+    <link href="https://use.fontawesome.com/releases/v6.0.0/css/all.css"
+        rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
 </head>
 
 <body>
@@ -27,35 +33,35 @@
                                 user.email }}</span>
                             <div class="auth-buttons">
                                 <a href="/auth/profile-page" class="profile-button">
-                                    <i class="fas fa-user"></i> Profile </a>
+                                    <span class="icon">👤</span> Profile </a>
                                 <button id="forceLogoutButton" class="logout-button"
                                     style="background: none; border: none; color: inherit; cursor: pointer; font: inherit;">
-                                    <i class="fas fa-sign-out-alt"></i> Logout </button>
+                                    <span class="icon">⏻</span> Logout </button>
                             </div>
                         </div>
                     </div>
                     <div id="loginSection" class="login-section" style="display: none;">
                         <a href="/auth/login" class="login-button">
-                            <i class="fas fa-sign-in-alt"></i> Login </a>
+                            <span class="icon">🔑</span> Login </a>
                         <a href="/auth/register" class="register-button">
-                            <i class="fas fa-user-plus"></i> Register </a>
+                            <span class="icon">➕</span> Register </a>
                     </div> {% else %} <div id="authSection" class="auth-section"
                         style="display: none;">
                         <div class="user-menu">
                             <span id="userName" class="user-name">User</span>
                             <div class="auth-buttons">
                                 <a href="/auth/profile-page" class="profile-button">
-                                    <i class="fas fa-user"></i> Profile </a>
+                                    <span class="icon">👤</span> Profile </a>
                                 <a href="#" class="dropdown-item">
-                                    <i class="fas fa-sign-out-alt"></i> Logout </a>
+                                    <span class="icon">⏻</span> Logout </a>
                             </div>
                         </div>
                     </div>
                     <div id="loginSection" class="login-section">
                         <a href="/auth/login" class="login-button">
-                            <i class="fas fa-sign-in-alt"></i> Login </a>
+                            <span class="icon">🔑</span> Login </a>
                         <a href="/auth/register" class="register-button">
-                            <i class="fas fa-user-plus"></i> Register </a>
+                            <span class="icon">➕</span> Register </a>
                     </div> {% endif %}
                 </div>
             </div>
@@ -63,19 +69,26 @@
         <!-- Slim Banner with Website Name -->
         <div class="banner">
             <div class="banner-content">
-                <h1 class="banner-title">
-                    <i class="fas fa-robot"></i> RegIntelligence Platform
-                </h1>
+                <h1 class="banner-title"> RegIntelligence Platform </h1>
                 <p class="banner-subtitle">The next generation of regulatory
                     intelligence</p>
             </div>
         </div>
         <main class="main-content">
+            <!-- Navigation Tabs -->
+            <div class="page-navigation">
+                <div class="nav-tabs">
+                    <a href="/" class="nav-tab active" id="warningLettersTab">
+                        <span class="icon">⚠️</span> Warning Letters </a>
+                    <a href="/rss-feeds" class="nav-tab" id="rssFeedsTab">
+                        <span class="icon">📰</span> RSS Feeds </a>
+                </div>
+            </div>
             <div class="chat-container">
                 <div class="chat-header">
                     <div class="header-main">
                         <div class="header-title-row">
-                            <h2><i class="fas fa-comments"></i> AI Chat Assistant</h2>
+                            <h2><span class="icon">🤖</span> AI Chat Assistant</h2>
                             <div class="status-indicators">
                                 <span class="status-dot" id="apiStatusDot"
                                     title="API Status"></span>
@@ -83,17 +96,13 @@
                                     title="Milvus Status"></span>
                             </div>
                         </div>
-                        <p>Ask questions about regulatory intelligence, FDA warning
-                            letters, or regulatory news</p>
+                        <p>Ask questions about FDA warning letters and regulatory
+                            compliance</p>
                     </div>
                     <div class="collection-selector-header">
                         <div class="collection-buttons">
-                            <button id="collectionRssFeeds"
-                                class="collection-button active"
-                                data-collection="rss_feeds"> 📰 Regulatory News
-                            </button>
                             <button id="collectionFdaWarningLetters"
-                                class="collection-button"
+                                class="collection-button active"
                                 data-collection="fda_warning_letters"> ⚠️ FDA Warning
                                 Letters </button>
                         </div>
@@ -105,8 +114,8 @@
                             <div class="message-content">
                                 <i class="fas fa-info-circle"></i> Welcome! I'm RegIna,
                                 your AI powered regulatory intelligence assistant. I can
-                                help you with questions FDA Warning Letters and the
-                                recent regulatory news.
+                                help you with questions about FDA Warning Letters and
+                                regulatory compliance issues.
                             </div>
                         </div>
                         <div class="message auth-info-message" id="authInfoMessage">
@@ -132,21 +141,21 @@
                                 placeholder="Type your message here..." rows="1"
                                 maxlength="1000"></textarea>
                             <button id="sendButton" class="send-button">
-                                <i class="fas fa-paper-plane"></i>
+                                <span class="icon">➤</span>
                             </button>
                         </div>
                         <div class="input-actions">
                             <button id="clearButton" class="action-button">
-                                <i class="fas fa-trash"></i> Clear Chat </button>
+                                <span class="icon">🗑️</span> Clear Chat </button>
                         </div>
                         <!-- Sources Section -->
                         <div class="sources-section-chat">
                             <div class="sources-header" id="sourcesHeader">
-                                <h4><i class="fas fa-database"></i> Sources <span
+                                <h4><span class="icon">🗄️</span> Sources <span
                                         id="sourcesCount"
                                         class="sources-count">(0)</span></h4>
                                 <button class="sources-toggle" id="sourcesToggle">
-                                    <i class="fas fa-chevron-down"></i>
+                                    <span class="icon">▼</span>
                                 </button>
                             </div>
                             <div class="sources-content" id="sourcesContent"
@@ -165,13 +174,12 @@
     <!-- Latest Information Tables -->
     <div class="info-tables-container">
         <div class="info-table-section">
-            <h3><i class="fas fa-exclamation-triangle"></i> Latest FDA Warning Letters
-            </h3>
+            <h3><span class="icon">⚠️</span> Latest FDA Warning Letters </h3>
             <div class="table-container">
                 <div style="margin-bottom: 15px; text-align: right;">
                     <button id="refreshFDABtn" class="action-button"
                         style="background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
-                        <i class="fas fa-sync"></i> Refresh Warning Letters </button>
+                        <span class="icon">🔄</span> Refresh Warning Letters </button>
                 </div>
                 <table class="info-table" id="fdaWarningLettersTable">
                     <thead>
@@ -190,56 +198,69 @@
                 </table>
             </div>
         </div>
-        <div class="info-table-section">
-            <h3><i class="fas fa-newspaper"></i> Latest RSS News</h3>
-            <div class="table-container">
-                <div style="margin-bottom: 15px; text-align: right;">
-                    <button id="refreshRSSBtn" class="action-button"
-                        style="background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
-                        <i class="fas fa-sync"></i> Refresh RSS News </button>
-                </div>
-                <table class="info-table" id="recentNewsTable">
-                    <thead>
-                        <tr>
-                            <th>Published Date</th>
-                            <th>Feed Source</th>
-                            <th>Article Title</th>
-                            <th>Category</th>
-                        </tr>
-                    </thead>
-                    <tbody id="recentNewsBody">
-                        <tr>
-                            <td colspan="4" class="loading-message">Loading latest RSS
-                                news...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
     </div>
     <!-- Weekly Warning Letters Chart -->
     <div class="info-tables-container">
         <div class="info-table-section">
-            <h3><i class="fas fa-chart-bar"></i> Weekly Warning Letters Trend</h3>
+            <h3><span class="icon">📊</span> Weekly Warning Letters Trend</h3>
             <div class="chart-container">
                 <div style="margin-bottom: 15px; text-align: right;">
                     <button id="refreshChartBtn" class="action-button"
                         style="background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
-                        <i class="fas fa-sync"></i> Refresh Chart </button>
+                        <span class="icon">🔄</span> Refresh Chart </button>
                 </div>
                 <div class="chart-wrapper">
                     <canvas id="weeklyChart" width="400" height="200"></canvas>
                 </div>
                 <div id="chartError" class="chart-error" style="display: none;">
-                    <i class="fas fa-exclamation-triangle"></i>
+                    <span class="icon">⚠️</span>
                     <span>Failed to load chart data</span>
                 </div>
+            </div>
+        </div>
+    </div>
+    <!-- Weekly Top Actions Chart -->
+    <div class="info-tables-container">
+        <div class="info-table-section">
+            <h3><span class="icon">📊</span> Weekly Top Action Categories (Last 4 Weeks)
+            </h3>
+            <div style="margin-bottom: 15px; text-align: right;">
+                <button id="refreshTopActionsBtn" class="action-button"
+                    style="background: #667eea; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer;">
+                    <span class="icon">🔄</span> Refresh Data </button>
+            </div>
+            <div style="position: relative; height: 400px; width: 100%;">
+                <canvas id="topActionsChart"></canvas>
             </div>
         </div>
     </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{{ url_for('static', path='/js/chat.js') }}?v=4"></script>
+    <!-- Font Awesome fallback script -->
+    <script>
+        // Check if Font Awesome loaded properly
+        document.addEventListener('DOMContentLoaded', function () {
+            // Test if Font Awesome is working
+            const testIcon = document.createElement('i');
+            testIcon.className = 'fas fa-user-tie';
+            testIcon.style.visibility = 'hidden';
+            testIcon.style.position = 'absolute';
+            document.body.appendChild(testIcon);
+
+            // Check if the icon rendered properly
+            const computedStyle = window.getComputedStyle(testIcon, ':before');
+            const content = computedStyle.getPropertyValue('content');
+
+            // If Font Awesome didn't load, add fallback classes
+            if (!content || content === 'none' || content === '""') {
+                console.log('Font Awesome not loaded, applying fallbacks');
+                document.body.classList.add('fa-fallback');
+            }
+
+            document.body.removeChild(testIcon);
+        });
+    </script>
     <script>
         // Check authentication status on page load and update UI
         async function checkAuthAndUpdateUI() {
@@ -385,7 +406,7 @@
                                 usePointStyle: true,
                                 padding: 20,
                                 font: {
-                                    family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+                                    family: '"Roboto", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
                                     size: 14,
                                     weight: '500'
                                 }
@@ -415,7 +436,7 @@
                             ticks: {
                                 stepSize: 1,
                                 font: {
-                                    family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+                                    family: '"Roboto", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
                                     size: 12
                                 }
                             },
@@ -427,7 +448,7 @@
                         x: {
                             ticks: {
                                 font: {
-                                    family: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+                                    family: '"Roboto", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
                                     size: 12
                                 }
                             },
@@ -458,22 +479,161 @@
             errorDiv.style.display = 'none';
         }
 
+        // Weekly Top Actions Table functionality
+        async function loadWeeklyTopActions() {
+            try {
+                console.log('🏆 Loading weekly top actions data...');
+                const response = await fetch('/api/warning-letters/weekly-top-actions');
+                console.log('🏆 Response status:', response.status);
+                console.log('🏆 Response headers:', response.headers);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🏆 Top actions data loaded successfully:', data);
+                    console.log('🏆 Data success:', data.success);
+                    console.log('🏆 Top actions array:', data.top_actions);
+                    console.log('🏆 Top actions length:', data.top_actions ? data.top_actions.length : 'undefined');
+
+                    if (data.success && data.top_actions) {
+                        console.log('🏆 Rendering top actions table with data:', data.top_actions);
+                        displayWeeklyTopActions(data.top_actions);
+                    } else {
+                        console.error('❌ No data available for top actions table');
+                        console.error('❌ Data success:', data.success);
+                        console.error('❌ Top actions:', data.top_actions);
+                        showTopActionsError('No data available for top actions table');
+                    }
+                } else {
+                    console.error('❌ Failed to load top actions data:', response.status);
+                    const errorText = await response.text();
+                    console.error('❌ Error response:', errorText);
+                    showTopActionsError('Failed to load top actions data');
+                }
+            } catch (error) {
+                console.error('❌ Error loading top actions data:', error);
+                showTopActionsError('Network error loading top actions data');
+            }
+        }
+
+        let topActionsChart = null;
+
+        function displayWeeklyTopActions(topActions) {
+            const canvas = document.getElementById('topActionsChart');
+            const ctx = canvas.getContext('2d');
+
+            if (!topActions || topActions.length === 0) {
+                if (topActionsChart) topActionsChart.destroy();
+                ctx.fillStyle = '#666';
+                ctx.font = '16px Roboto, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('No top actions data available', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            // Group by week_display (Week X YYYY), not just week_num
+            const weeklyData = {};
+            topActions.forEach(action => {
+                const weekLabel = action.week_display || `Week ${action.week_num}`;
+                if (!weeklyData[weekLabel]) {
+                    weeklyData[weekLabel] = [];
+                }
+                weeklyData[weekLabel].push(action);
+            });
+
+            // Sort weeks chronologically using the real date
+            const sortedWeeks = Object.keys(weeklyData).sort((a, b) => {
+                // Expect format: "Week X YYYY"
+                const [_, weekA, yearA] = a.match(/Week (\d+) (\d{4})/) || [];
+                const [__, weekB, yearB] = b.match(/Week (\d+) (\d{4})/) || [];
+                const dateA = new Date(yearA, 0, 1 + (parseInt(weekA) - 1) * 7);
+                const dateB = new Date(yearB, 0, 1 + (parseInt(weekB) - 1) * 7);
+                return dateA - dateB;
+            });
+
+            const allCategories = new Set();
+            sortedWeeks.forEach(week => {
+                weeklyData[week].forEach(action => {
+                    allCategories.add(action.action_category);
+                });
+            });
+
+            const categories = Array.from(allCategories);
+            const colors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe', '#00f2fe', '#43e97b', '#38f9d7'];
+
+            const datasets = categories.map((category, index) => {
+                const data = sortedWeeks.map(week => {
+                    const weekActions = weeklyData[week];
+                    const action = weekActions.find(a => a.action_category === category);
+                    return action ? action.action_count : 0;
+                });
+                return {
+                    label: category,
+                    data: data,
+                    backgroundColor: colors[index % colors.length],
+                    borderColor: colors[index % colors.length],
+                    borderWidth: 1
+                };
+            });
+
+            // ✅ Labels now match "Week X YYYY"
+            const labels = sortedWeeks;
+
+            if (topActionsChart) topActionsChart.destroy();
+            topActionsChart = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Top Action Categories by Week',
+                            font: { family: 'Roboto, sans-serif', size: 16, weight: 'bold' }
+                        },
+                        legend: { display: true, position: 'top' }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'Week' } },
+                        y: { beginAtZero: true, title: { display: true, text: 'Number of Actions' } }
+                    }
+                }
+            });
+        }
+
+        function showTopActionsError(message) {
+            const canvas = document.getElementById('topActionsChart');
+            const ctx = canvas.getContext('2d');
+
+            // Clear chart if it exists
+            if (topActionsChart) {
+                topActionsChart.destroy();
+            }
+
+            // Draw error message
+            ctx.fillStyle = '#f5576c';
+            ctx.font = '16px Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+        }
+
         // Check auth on page load
         document.addEventListener('DOMContentLoaded', () => {
             checkAuthAndUpdateUI();
-            loadLatestRSSNews(); // Load RSS news on page load
+            loadFDAWarningLetters(); // Load warning letters on page load
             loadWeeklyChart(); // Load weekly chart on page load
+            loadWeeklyTopActions(); // Load weekly top actions on page load
 
             // Add refresh button event listener
-            const refreshRSSBtn = document.getElementById('refreshRSSBtn');
-            console.log('🔍 Looking for refresh button with ID: refreshRSSBtn');
-            console.log('🔍 Found button element:', refreshRSSBtn);
+            const refreshFDABtn = document.getElementById('refreshFDABtn');
+            console.log('🔍 Looking for refresh button with ID: refreshFDABtn');
+            console.log('🔍 Found button element:', refreshFDABtn);
 
-            if (refreshRSSBtn) {
+            if (refreshFDABtn) {
                 console.log('✅ Adding click event listener to refresh button');
-                refreshRSSBtn.addEventListener('click', () => {
-                    console.log('🔄 Manual RSS refresh button clicked');
-                    loadLatestRSSNews();
+                refreshFDABtn.addEventListener('click', () => {
+                    console.log('🔄 Manual FDA refresh button clicked');
+                    loadFDAWarningLetters();
                 });
                 console.log('✅ Event listener added successfully');
             } else {
@@ -487,30 +647,8 @@
             if (!document.hidden) {
                 console.log('🔍 Page became visible, checking auth status...');
                 checkAuthAndUpdateUI();
-                // Don't auto-refresh RSS news on visibility change to prevent data loss
-                // loadLatestRSSNews(); // Commented out to prevent unwanted refreshes
             }
         });
-
-        // Function to load latest RSS news
-        async function loadLatestRSSNews() {
-            try {
-                console.log('🔍 Loading latest RSS news...');
-                const response = await fetch('/api/rss-feeds/latest');
-
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('🔍 RSS news loaded successfully');
-                    displayRSSNews(data.articles);
-                } else {
-                    console.error('❌ Failed to load RSS news:', response.status);
-                    showRSSNewsError('Failed to load RSS news');
-                }
-            } catch (error) {
-                console.error('❌ Error loading RSS news:', error);
-                showRSSNewsError('Network error loading RSS news');
-            }
-        }
 
         // Standardized date formatting function
         function formatDateStandard(dateString) {
@@ -525,50 +663,6 @@
                 });
             } catch (error) {
                 return 'N/A';
-            }
-        }
-
-        // Function to display RSS news in the table
-        function displayRSSNews(articles) {
-            const tbody = document.getElementById('recentNewsBody');
-
-            if (!articles || articles.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="no-data">No RSS news available</td>
-                    </tr>
-                `;
-                return;
-            }
-
-            let html = '';
-            articles.forEach(article => {
-                const date = formatDateStandard(article.article_published_date);
-                const title = article.article_title || 'No title available';
-                const category = article.content_category || 'Uncategorized';
-
-                html += `
-                    <tr>
-                        <td>${date}</td>
-                        <td><strong>${article.article_feed_name || 'Unknown source'}</strong></td>
-                        <td><strong>${title}</strong></td>
-                        <td><span class="category-badge">${category}</span></td>
-                    </tr>
-                `;
-            });
-
-            tbody.innerHTML = html;
-        }
-
-        // Function to show RSS news error
-        function showRSSNewsError(message) {
-            const tbody = document.getElementById('recentNewsBody');
-            if (tbody) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="4" class="error-message">${message}</td>
-                    </tr>
-                `;
             }
         }
 
@@ -644,22 +738,22 @@
         // Handle force logout button
         document.addEventListener('DOMContentLoaded', () => {
             // Load data when page loads
-            loadLatestRSSNews();
             loadFDAWarningLetters();
 
             // Add refresh button event listeners
-            const refreshRSSBtn = document.getElementById('refreshRSSBtn');
             const refreshFDABtn = document.getElementById('refreshFDABtn');
             const refreshChartBtn = document.getElementById('refreshChartBtn');
 
-            if (refreshRSSBtn) {
-                refreshRSSBtn.addEventListener('click', loadLatestRSSNews);
-            }
             if (refreshFDABtn) {
                 refreshFDABtn.addEventListener('click', loadFDAWarningLetters);
             }
             if (refreshChartBtn) {
                 refreshChartBtn.addEventListener('click', loadWeeklyChart);
+            }
+
+            const refreshTopActionsBtn = document.getElementById('refreshTopActionsBtn');
+            if (refreshTopActionsBtn) {
+                refreshTopActionsBtn.addEventListener('click', loadWeeklyTopActions);
             }
 
             const forceLogoutButton = document.getElementById('forceLogoutButton');
@@ -702,25 +796,74 @@
             }
         });
 
-        // Add CSS for better RSS news table styling
+        // Add CSS for navigation and table styling
         const style = document.createElement('style');
         style.textContent = `
+            /* Navigation Tabs */
+            .page-navigation {
+                background: #f8f9fa;
+                border-bottom: 1px solid #e1e5e9;
+                padding: 0;
+                margin-bottom: 20px;
+            }
+            
+            .nav-tabs {
+                display: flex;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 0 24px;
+            }
+            
+            .nav-tab {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 16px 24px;
+                text-decoration: none;
+                color: #6c757d;
+                font-weight: 400;
+                border-bottom: 3px solid transparent;
+                transition: all 0.3s ease;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 16px;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+            }
+            
+            .nav-tab:hover {
+                color: #667eea;
+                background: rgba(102, 126, 234, 0.05);
+            }
+            
+            .nav-tab.active {
+                color: #667eea;
+                border-bottom-color: #667eea;
+                background: rgba(102, 126, 234, 0.1);
+            }
+            
+            .nav-tab i {
+                font-size: 18px;
+            }
             .info-table td {
                 padding: 12px;
                 border-bottom: 1px solid #e1e5e9;
                 vertical-align: top;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             .info-table td:nth-child(1) {
                 width: 120px;
                 font-weight: 600;
                 color: #667eea;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             .info-table td:nth-child(2) {
                 width: 150px;
                 font-weight: 600;
                 color: #333;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             .info-table td:nth-child(3) {
@@ -728,11 +871,13 @@
                 font-weight: 600;
                 color: #333;
                 line-height: 1.4;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             .info-table td:nth-child(4) {
                 color: #333;
                 line-height: 1.5;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             .category-badge {
@@ -744,24 +889,49 @@
                 font-weight: 500;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             .loading-message {
                 text-align: center;
                 color: #666;
                 font-style: italic;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             .no-data {
                 text-align: center;
                 color: #999;
                 font-style: italic;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             .error-message {
                 text-align: center;
                 color: #ff4757;
                 font-style: italic;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+            }
+
+            .count-badge {
+                background: #667eea;
+                color: white;
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+            }
+
+            .rank-badge {
+                background: #f8f9fa;
+                color: #667eea;
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                border: 1px solid #e1e5e9;
+                font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
             }
             
             /* FDA Warning Letters specific styling */

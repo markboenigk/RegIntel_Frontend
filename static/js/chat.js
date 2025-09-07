@@ -57,13 +57,9 @@ class ChatApp {
 
 
 
-        // Collection selector (header buttons)
-        const collectionRssFeeds = document.getElementById('collectionRssFeeds');
+        // Collection selector (header buttons) - Only FDA Warning Letters
         const collectionFdaWarningLetters = document.getElementById('collectionFdaWarningLetters');
 
-        if (collectionRssFeeds) {
-            collectionRssFeeds.addEventListener('click', () => this.switchCollection('rss_feeds'));
-        }
         if (collectionFdaWarningLetters) {
             collectionFdaWarningLetters.addEventListener('click', () => this.switchCollection('fda_warning_letters'));
         }
@@ -131,25 +127,10 @@ class ChatApp {
         this.showTypingIndicator();
         this.isLoading = true;
 
-        // Get selected collection
-        const activeButton = document.querySelector('.collection-button.active');
-        const selectedCollection = activeButton ? activeButton.getAttribute('data-collection') : 'rss_feeds';
+        // Get selected collection - Only FDA Warning Letters
+        const selectedCollection = 'fda_warning_letters';
 
         try {
-            // Check if this is an FDA-related question in RSS feeds collection
-            const messageLower = message.toLowerCase();
-            const isFdaQuestion = messageLower.includes('fda') ||
-                messageLower.includes('warning letter') ||
-                messageLower.includes('inspection') ||
-                messageLower.includes('violation') ||
-                messageLower.includes('compliance');
-
-            if (isFdaQuestion && selectedCollection === 'rss_feeds') {
-                // Suggest switching to FDA collection for FDA-related questions
-                this.addMessageToChat('assistant', '💡 <strong>Tip:</strong> This question appears to be about FDA compliance. For best results, please switch to the "FDA Warning Letters" collection using the tab above.');
-                this.hideTypingIndicator();
-                return;
-            }
 
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
@@ -490,8 +471,8 @@ class ChatApp {
                     <i class="fas fa-info-circle"></i>
                     Welcome! I'm RegIna,
                                 your AI powered regulatory intelligence assistant. I can
-                                help you with questions about FDA Warning Letters and the
-                                recent regulatory news.
+                                help you with questions about FDA Warning Letters and
+                                regulatory compliance issues.
                 </div>
             </div>
         `;
@@ -527,16 +508,14 @@ class ChatApp {
     }
 
     setInitialCollectionState() {
-        // Ensure RSS Feeds button is active by default
-        const rssButton = document.getElementById('collectionRssFeeds');
+        // Ensure FDA Warning Letters button is active by default
         const fdaButton = document.getElementById('collectionFdaWarningLetters');
 
-        if (rssButton && fdaButton) {
-            rssButton.classList.add('active');
-            fdaButton.classList.remove('active');
-            console.log('✅ Initial collection state set: RSS Feeds active');
+        if (fdaButton) {
+            fdaButton.classList.add('active');
+            console.log('✅ Initial collection state set: FDA Warning Letters active');
         } else {
-            console.error('❌ Collection buttons not found');
+            console.error('❌ FDA Warning Letters button not found');
         }
     }
 
@@ -728,12 +707,7 @@ class ChatApp {
         this.updateCollectionDisplay(collectionName);
 
         // Show a notification
-        const collectionLabels = {
-            'rss_feeds': 'Regulatory News',
-            'fda_warning_letters': 'FDA Warning Letters'
-        };
-
-        this.addMessageToChat('system', `Switched to ${collectionLabels[collectionName]} collection. You can now ask questions about this data.`);
+        this.addMessageToChat('system', `Switched to FDA Warning Letters collection. You can now ask questions about warning letters and regulatory compliance.`);
 
         // Reset sources count when switching collections
         const sourcesCount = document.getElementById('sourcesCount');
@@ -746,17 +720,12 @@ class ChatApp {
     updateCollectionDisplay(collectionName) {
         // Update any UI elements that show the current collection
         const collectionLabels = {
-            'rss_feeds': '📰 Regulatory News',
             'fda_warning_letters': '⚠️ FDA Warning Letters'
         };
 
         // Update the collection button states
-        const rssButton = document.getElementById('collectionRssFeeds');
         const fdaButton = document.getElementById('collectionFdaWarningLetters');
 
-        if (rssButton) {
-            rssButton.classList.toggle('active', collectionName === 'rss_feeds');
-        }
         if (fdaButton) {
             fdaButton.classList.toggle('active', collectionName === 'fda_warning_letters');
         }

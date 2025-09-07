@@ -1,5 +1,83 @@
 /* Apple-Style Modern UI for RegIntel - AI-Powered Regulatory Intelligence */
 
+/* Import Roboto font for elegant typography */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+/* Font Awesome fallback and icon styling */
+.fas,
+.far,
+.fab {
+    font-family: "Font Awesome 6 Free", "Font Awesome 6 Pro", "Font Awesome 5 Free", "Font Awesome 5 Pro", "FontAwesome", sans-serif;
+    font-weight: 900;
+    display: inline-block;
+    font-style: normal;
+    font-variant: normal;
+    text-rendering: auto;
+    line-height: 1;
+}
+
+/* Fallback for when Font Awesome doesn't load */
+.fa-fallback .fas:before {
+    content: attr(data-fallback);
+}
+
+/* Specific icon fallbacks */
+.fa-user-tie:before {
+    content: "👤";
+}
+
+.fa-power-off:before {
+    content: "⏻";
+}
+
+.fa-robot:before {
+    content: "🤖";
+}
+
+.fa-sign-in-alt:before {
+    content: "🔑";
+}
+
+.fa-user-plus:before {
+    content: "➕";
+}
+
+.fa-exclamation-triangle:before {
+    content: "⚠️";
+}
+
+.fa-newspaper:before {
+    content: "📰";
+}
+
+.fa-sync:before {
+    content: "🔄";
+}
+
+.fa-chart-bar:before {
+    content: "📊";
+}
+
+.fa-database:before {
+    content: "🗄️";
+}
+
+.fa-paper-plane:before {
+    content: "✈️";
+}
+
+.fa-trash:before {
+    content: "🗑️";
+}
+
+.fa-chevron-down:before {
+    content: "▼";
+}
+
+.fa-info-circle:before {
+    content: "ℹ️";
+}
+
 /* Reset and base styles */
 * {
     margin: 0;
@@ -8,19 +86,20 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
-    line-height: 1.5;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    line-height: 1.6;
     color: #1d1d1f;
     background: #fbfbfd;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-weight: 400;
 }
 
 /* Ensure all form elements use the unified font family by default */
 input,
 textarea,
 select {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* Additional input types that might need font family */
@@ -31,7 +110,7 @@ input[type="search"],
 input[type="url"],
 input[type="tel"],
 input[type="number"] {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* Container and layout */
@@ -99,18 +178,20 @@ input[type="number"] {
 }
 
 .banner-title {
-    font-size: 2.5rem;
-    font-weight: 700;
+    font-size: 2.8rem;
+    font-weight: 500;
     margin-bottom: 12px;
     color: #1d1d1f;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.01em;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .banner-subtitle {
-    font-size: 1.1rem;
-    color: #86868b;
+    font-size: 1.2rem;
+    color: #6c757d;
     margin-bottom: 20px;
-    font-weight: 400;
+    font-weight: 300;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .collection-indicator {
@@ -200,21 +281,24 @@ input[type="number"] {
 }
 
 .chat-header h2 {
-    font-size: 1.6rem;
-    font-weight: 700;
+    font-size: 1.8rem;
+    font-weight: 500;
     margin-bottom: 8px;
     color: #1d1d1f;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: -0.01em;
 }
 
 .chat-header p {
-    font-size: 0.95rem;
-    color: #86868b;
+    font-size: 1rem;
+    color: #6c757d;
     margin: 0;
-    font-weight: 400;
+    font-weight: 300;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .collection-selector-header {
@@ -241,6 +325,7 @@ input[type="number"] {
     outline: none;
     transition: all 0.2s ease;
     white-space: nowrap;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .collection-button:hover {
@@ -359,7 +444,7 @@ input[type="number"] {
     padding: 16px 20px;
     border: 1px solid #e5e5e7;
     border-radius: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-size: 0.95rem;
     resize: none;
     min-height: 48px;
@@ -566,6 +651,7 @@ input[type="number"] {
     transition: all 0.2s ease;
     font-size: 0.85rem;
     font-weight: 500;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .action-button:hover {
@@ -596,7 +682,7 @@ input[type="number"] {
     padding: 12px 16px;
     border: 1px solid #e5e5e7;
     border-radius: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-size: 0.9rem;
     transition: all 0.2s ease;
     background: #f5f5f7;
@@ -647,13 +733,15 @@ input[type="number"] {
 }
 
 .info-table-section h3 {
-    font-size: 1.2rem;
-    font-weight: 600;
+    font-size: 1.3rem;
+    font-weight: 500;
     margin-bottom: 20px;
     color: #1d1d1f;
     display: flex;
     align-items: center;
     gap: 10px;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: -0.01em;
 }
 
 .table-container {
@@ -674,13 +762,17 @@ input[type="number"] {
     text-align: left;
     border-bottom: 1px solid #e5e5e7;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
+    font-weight: 500;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 0.85rem;
 }
 
 .info-table td {
     padding: 12px 16px;
     border-bottom: 1px solid #f0f0f0;
     vertical-align: top;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .info-table tbody tr:hover {
@@ -788,24 +880,78 @@ input[type="number"] {
 
 /* Unified table styling - all tables use the same colors and fonts */
 .info-table {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* Force override any conflicting styles */
+.info-table,
 .info-table td,
-.info-table th {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif !important;
+.info-table th,
+.info-table * {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif !important;
+}
+
+/* Ensure RSS header text uses Roboto */
+.rss-header p,
+.rss-header h2,
+.rss-header * {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif !important;
+}
+
+/* Ensure all subtitle elements use Roboto */
+.banner-subtitle,
+.rss-header p,
+.chat-header p,
+.info-table-section h3,
+.info-table-section p {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif !important;
+}
+
+/* Match RSS header paragraph styling to chat header paragraph */
+.rss-header p {
+    font-size: 1rem;
+    color: #6c757d;
+    margin: 0;
+    font-weight: 300;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif !important;
+}
+
+/* Universal Roboto font override for any remaining elements */
+p,
+span,
+div,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+a,
+button,
+input,
+textarea,
+select,
+label,
+li,
+td,
+th {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif !important;
+}
+
+/* Final comprehensive font override - catch absolutely everything */
+* {
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif !important;
 }
 
 .info-table th {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 600;
     font-size: 0.85rem;
     color: #4a5568;
 }
 
 .info-table td {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-weight: 400;
     font-size: 0.9rem;
 }
@@ -1085,7 +1231,7 @@ input[type="number"] {
     padding: 12px 16px;
     border: 1px solid #e5e5e7;
     border-radius: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     font-size: 0.9rem;
     transition: all 0.2s ease;
     background: #f5f5f7;
@@ -1193,6 +1339,7 @@ html {
     color: white;
     font-size: 0.9rem;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* Auth Buttons - Simple Profile and Logout */
@@ -1218,6 +1365,7 @@ html {
     gap: 6px;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .auth-buttons .profile-button:hover,
@@ -1262,6 +1410,7 @@ html {
     gap: 8px;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .login-button:hover,
@@ -1460,6 +1609,7 @@ html {
     color: #fff;
     font-weight: 500;
     font-size: 0.9rem;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
 }
 
 .user-menu-button {
@@ -1767,4 +1917,40 @@ html {
     50% {
         opacity: 0.5;
     }
+}
+
+/* Universal icon styling */
+.icon {
+    display: inline-block;
+    font-size: 1em;
+    line-height: 1;
+    margin-right: 0.5em;
+    vertical-align: middle;
+    text-decoration: none;
+}
+
+/* Icon sizing for different contexts */
+h2 .icon, h3 .icon {
+    font-size: 1.2em;
+    margin-right: 0.3em;
+}
+
+button .icon, .action-button .icon {
+    font-size: 0.9em;
+    margin-right: 0.3em;
+}
+
+.nav-tab .icon {
+    font-size: 1em;
+    margin-right: 0.3em;
+}
+
+/* Ensure icons are properly aligned */
+.auth-buttons .icon,
+.profile-button .icon,
+.logout-button .icon,
+.login-button .icon,
+.register-button .icon {
+    font-size: 0.9em;
+    margin-right: 0.3em;
 }

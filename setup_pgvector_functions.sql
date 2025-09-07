@@ -143,6 +143,47 @@ ON public.warning_letters_vectors USING hnsw (text_vector vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS rss_feeds_text_vector_idx 
 ON public.rss_feeds USING hnsw (text_vector vector_cosine_ops);
 
+-- Function to get weekly top action categories
+CREATE OR REPLACE FUNCTION get_weekly_top_actions()
+RETURNS TABLE (
+    week_num int,
+    action_category text,
+    action_count bigint
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN QUERY
+    WITH weekly_counts AS (
+        SELECT
+            EXTRACT(WEEK FROM letter_date) AS week_num,
+            action_category,
+            COUNT(*) AS action_count
+        FROM public.actions_analytics
+        GROUP BY EXTRACT(WEEK FROM letter_date), action_category
+    ),
+    ranked AS (
+        SELECT
+            week_num,
+            action_category,
+            action_count,
+            ROW_NUMBER() OVER (
+                PARTITION BY week_num
+                ORDER BY action_count DESC
+            ) AS rn
+        FROM weekly_counts
+    )
+    SELECT
+        week_num::int,
+        action_category,
+        action_count
+    FROM ranked
+    WHERE rn <= 3
+    ORDER BY week_num DESC, action_count DESC;
+END;
+$$;
+
 -- Grant necessary permissions
 GRANT EXECUTE ON FUNCTION search_warning_letters TO authenticated;
 GRANT EXECUTE ON FUNCTION search_rss_feeds TO authenticated;
+GRANT EXECUTE ON FUNCTION get_weekly_top_actions TO authenticated;

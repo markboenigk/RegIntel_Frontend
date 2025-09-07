@@ -65,12 +65,25 @@ class SupabaseConfig:
                 if os.getenv(var):
                     print(f"⚠️ Found proxy environment variable: {var}={os.getenv(var)}")
             
-            # Use the correct parameter names that Supabase client expects
-            # Explicitly pass only the required parameters to avoid proxy issues
-            self.client: Client = create_client(
-                supabase_url=self.supabase_url,
-                supabase_key=self.supabase_key
-            )
+            # Temporarily unset proxy environment variables to avoid client issues
+            proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy']
+            old_proxy_values = {}
+            for var in proxy_vars:
+                if var in os.environ:
+                    old_proxy_values[var] = os.environ[var]
+                    del os.environ[var]
+            
+            try:
+                # Use the correct parameter names that Supabase client expects
+                # Explicitly pass only the required parameters to avoid proxy issues
+                self.client: Client = create_client(
+                    supabase_url=self.supabase_url,
+                    supabase_key=self.supabase_key
+                )
+            finally:
+                # Restore proxy environment variables
+                for var, value in old_proxy_values.items():
+                    os.environ[var] = value
             print(f"✅ Supabase client created successfully")
         except Exception as e:
             print(f"❌ Failed to create Supabase client: {str(e)}")
