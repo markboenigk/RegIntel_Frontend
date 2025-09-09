@@ -7,7 +7,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- Function to search warning letters using pgvector
 CREATE OR REPLACE FUNCTION search_warning_letters(
     query_embedding vector(1536),
-    match_threshold float DEFAULT 0.1,
+    match_threshold float DEFAULT 0.3,
     match_count int DEFAULT 10
 )
 RETURNS TABLE (
@@ -63,7 +63,7 @@ $$;
 -- Function to search RSS feeds using pgvector
 CREATE OR REPLACE FUNCTION search_rss_feeds(
     query_embedding vector(1536),
-    match_threshold float DEFAULT 0.1,
+    match_threshold float DEFAULT 0.3,
     match_count int DEFAULT 10
 )
 RETURNS TABLE (
@@ -183,7 +183,22 @@ BEGIN
 END;
 $$;
 
+-- Function for direct SQL execution (for fallback vector search)
+CREATE OR REPLACE FUNCTION exec_sql(query text)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    result json;
+BEGIN
+    EXECUTE query INTO result;
+    RETURN result;
+END;
+$$;
+
 -- Grant necessary permissions
 GRANT EXECUTE ON FUNCTION search_warning_letters TO authenticated;
 GRANT EXECUTE ON FUNCTION search_rss_feeds TO authenticated;
 GRANT EXECUTE ON FUNCTION get_weekly_top_actions TO authenticated;
+GRANT EXECUTE ON FUNCTION exec_sql TO authenticated;

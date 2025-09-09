@@ -97,155 +97,163 @@ async def get_embedding(text: str) -> List[float]:
         print(f"Error getting embedding: {e}")
         return []
 
-async def search_fda_warning_letters_pgvector(query_embedding: List[float], search_limit: int) -> List[Dict[str, Any]]:
-    """Search FDA warning letters using Supabase pgvector."""
+async def search_fda_warning_letters_milvus(query_embedding: List[float], search_limit: int) -> List[Dict[str, Any]]:
+    """Search FDA warning letters using Milvus."""
     try:
-        # Use direct HTTP requests to Supabase REST API to bypass client issues
-        import os
-        import requests
-        
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_ANON_KEY")
-        
-        if not supabase_url or not supabase_key:
-            print(f"❌ DEBUG: Supabase credentials not available")
+        if not MILVUS_URI or not MILVUS_TOKEN:
+            print(f"❌ DEBUG: Milvus credentials not available")
             return []
         
-        print(f"🔍 DEBUG: Using direct HTTP approach to Supabase...")
+        print(f"🔍 DEBUG: Using Milvus for FDA warning letters search...")
         print(f"🔍 DEBUG: Search limit: {search_limit}")
         
-        # Make direct HTTP request to Supabase REST API
+        # Milvus search endpoints
+        search_endpoints = [
+            f"{MILVUS_URI}/v2/vectordb/entities/search",
+            f"{MILVUS_URI}/v1/vectordb/entities/search"
+        ]
+        
         headers = {
-            "apikey": supabase_key,
-            "Authorization": f"Bearer {supabase_key}",
+            "Authorization": f"Bearer {MILVUS_TOKEN}",
             "Content-Type": "application/json"
         }
         
-        # Convert embedding to list format for pgvector
-        embedding_list = [float(x) for x in query_embedding]
+        # Convert embedding to float32 array
+        query_embedding_float32 = [float(x) for x in query_embedding]
         
-        # Add timeout wrapper for Vercel
-        import asyncio
+        # Output fields for FDA warning letters
+        output_fields = [
+            "warning_letter_id", "company_name", "letter_date", "chunk_id", 
+            "chunk_type", "chunk_index", "total_chunks", "text_content", 
+            "text_length", "estimated_tokens", "violations", "required_actions",
+            "systemic_issues", "regulatory_consequences", "product_types", 
+            "product_categories", "created_at", "updated_at"
+        ]
         
-        # Try RPC function first, then fallback to direct table query
-        try:
-            print(f"🔍 DEBUG: Trying RPC function with embedding length: {len(embedding_list)}")
-            # Use RPC function for vector search
-            rpc_url = f"{supabase_url}/rest/v1/rpc/search_warning_letters"
-            rpc_payload = {
-                "query_embedding": embedding_list,
-                "match_threshold": 0.1,
-                "match_count": search_limit
-            }
-            
-            response = requests.post(rpc_url, headers=headers, json=rpc_payload)
-            if response.status_code == 200:
-                data = response.json()
-                print(f"🔍 DEBUG: RPC function successful, got {len(data) if data else 0} results")
-            else:
-                print(f"⚠️ DEBUG: RPC function failed with status {response.status_code}, using direct query")
-                raise Exception("RPC function not available")
-                
-        except Exception as rpc_error:
-            print(f"⚠️ DEBUG: RPC function not available, using direct query: {rpc_error}")
-            # Use vector table with essential fields for all queries
-            print(f"🔍 DEBUG: Using vector table with essential fields")
-            table_url = f"{supabase_url}/rest/v1/warning_letters_vectors?select=text_content,company_name,letter_date,chunk_type,chunk_id,warning_letter_id&order=letter_date.desc&limit={search_limit}"
-            
-            response = requests.get(table_url, headers=headers)
-            if response.status_code != 200:
-                print(f"❌ DEBUG: Table query failed with status {response.status_code}")
-                return []
-            
-            data = response.json()
-            if not data:
-                print("❌ DEBUG: No data returned from table search")
-                return []
+        # Milvus search payload
+        search_data = {
+            "collectionName": "fda_warning_letters",
+            "data": [query_embedding_float32],
+            "limit": search_limit,
+            "outputFields": output_fields,
+            "metricType": "COSINE",
+            "params": {"nprobe": 10},
+            "fieldName": "text_vector"
+        }
         
-        # Process the results
-        sources = []
-        for row in data:
+        print(f"🔍 DEBUG: Attempting Milvus search...")
+        print(f"🔍 DEBUG: Collection: fda_warning_letters")
+        print(f"🔍 DEBUG: Embedding dimensions: {len(query_embedding_float32)}")
+        
+        # Try different endpoints
+        search_successful = False
+        for endpoint in search_endpoints:
             try:
-                # Parse the text_vector back to list if needed
-                text_vector = row.get('text_vector')
-                if isinstance(text_vector, str):
-                    # Parse JSON string to list
-                    import json
-                    text_vector = json.loads(text_vector)
+                print(f"🔍 DEBUG: Trying endpoint: {endpoint}")
+                response = requests.post(endpoint, json=search_data, headers=headers, timeout=15)
+                print(f"🔍 DEBUG: Endpoint {endpoint} response status: {response.status_code}")
                 
-                # Debug: Check the actual data structure
-                print(f"🔍 DEBUG: Row data - letter_date: {row.get('letter_date')}, type: {type(row.get('letter_date'))}")
-                print(f"🔍 DEBUG: Available fields: {list(row.keys())}")
-                
-                # Use standard vector table schema for all queries
-                metadata = {
-                    "company_name": row.get('company_name', 'Unknown Company'),
-                    "letter_date": row.get('letter_date', 'Unknown Date'),
-                    "chunk_type": row.get('chunk_type', 'Unknown Type'),
-                    "chunk_id": row.get('chunk_id', 'Unknown Chunk'),
-                    "warning_letter_id": row.get('warning_letter_id', 'Unknown ID'),
-                    "violations": row.get('violations', '{}'),
-                    "required_actions": row.get('required_actions', '{}'),
-                    "systemic_issues": row.get('systemic_issues', '{}'),
-                    "regulatory_consequences": row.get('regulatory_consequences', '{}')
-                }
-                text_content = row.get('text_content', 'No content available')
-                
-                source = {
-                    "text": text_content,
-                    "metadata": metadata
-                }
-                sources.append(source)
-                
-            except Exception as e:
-                print(f"❌ DEBUG: Error parsing row: {e}")
+                if response.status_code == 200:
+                    print(f"✅ DEBUG: Search successful via {endpoint}")
+                    search_successful = True
+                    break
+                else:
+                    print(f"❌ DEBUG: Endpoint {endpoint} failed: {response.status_code}")
+                    print(f"❌ DEBUG: Response text: {response.text[:200]}")
+                    
+            except requests.exceptions.Timeout:
+                print(f"⏰ DEBUG: Endpoint {endpoint} timed out")
+                continue
+            except Exception as endpoint_error:
+                print(f"❌ DEBUG: Endpoint {endpoint} error: {str(endpoint_error)}")
                 continue
         
-        # Sort by date for better relevance
-        if True:  # Always sort by date for better relevance
-            print(f"🔍 DEBUG: Sorting results by letter_date for latest query")
-            try:
-                def safe_date_sort(x):
-                    metadata = x.get('metadata', {})
-                    date_str = metadata.get('letter_date', '') if metadata else ''
-                    print(f"🔍 DEBUG: Sorting - date_str: '{date_str}', type: {type(date_str)}")
+        if not search_successful:
+            print(f"❌ DEBUG: All Milvus search endpoints failed")
+            return []
+        
+        result = response.json()
+        print(f'🔍 DEBUG: Milvus response: {json.dumps(result, indent=2)[:500]}...')
+        
+        # Check if this is an error response
+        if 'code' in result and result.get('code') != 0:
+            print(f"❌ DEBUG: Milvus API returned error: Code {result.get('code')}, Message: {result.get('message')}")
+            return []
+        
+        sources = []
+        if 'data' in result and result['data']:
+            print(f"🔍 DEBUG: Found 'data' field in response with {len(result['data'])} items")
+            
+            for hit in result['data']:
+                try:
+                    # Create metadata based on FDA warning letters schema
+                    metadata = {
+                        "company_name": hit.get('company_name', 'Unknown Company'),
+                        "letter_date": hit.get('letter_date', 'Unknown Date'),
+                        "chunk_type": hit.get('chunk_type', 'Unknown Type'),
+                        "chunk_id": hit.get('chunk_id', 'Unknown Chunk'),
+                        "warning_letter_id": hit.get('warning_letter_id', 'Unknown ID'),
+                        "violations": hit.get('violations', []),
+                        "required_actions": hit.get('required_actions', []),
+                        "systemic_issues": hit.get('systemic_issues', []),
+                        "regulatory_consequences": hit.get('regulatory_consequences', []),
+                        "product_types": hit.get('product_types', []),
+                        "product_categories": hit.get('product_categories', [])
+                    }
                     
-                    if not date_str or date_str == 'Unknown Date':
-                        print(f"🔍 DEBUG: Using default date for: '{date_str}'")
-                        return datetime(1900, 1, 1)  # Put unknown dates at the end
+                    text_content = hit.get('text_content', 'No content available')
                     
-                    # Try different date formats
-                    date_formats = [
-                        '%B %d, %Y',      # July 11, 2025, August 28, 2025
-                        '%m/%d/%Y',       # 07/11/2025, 08/28/2025
-                        '%Y-%m-%d',       # 2025-07-11, 2025-08-28
-                    ]
-                    
-                    for fmt in date_formats:
-                        try:
-                            parsed_date = datetime.strptime(date_str, fmt)
-                            print(f"🔍 DEBUG: Successfully parsed '{date_str}' with format '{fmt}' -> {parsed_date}")
-                            return parsed_date
-                        except ValueError:
-                            continue
-                    
-                    # If no format matches, return a very old date
-                    print(f"🔍 DEBUG: No format matched for '{date_str}', using default date")
-                    return datetime(1900, 1, 1)
+                    source = {
+                        "text": text_content,
+                        "metadata": metadata
+                    }
+                    sources.append(source)
+                    print(f"🔍 DEBUG: Added source: {metadata['company_name']} - {metadata['letter_date']}")
                 
-                sources.sort(key=safe_date_sort, reverse=True)
-                # Trim to original limit after sorting
-                sources = sources[:search_limit // 3]  # Convert back to original top_k
-                print(f"🔍 DEBUG: After sorting and trimming: {len(sources)} sources")
+                except Exception as e:
+                    print(f"❌ DEBUG: Error parsing hit: {e}")
+                    continue
+            
+            # Sort by date for better relevance (most recent first)
+            print(f"🔍 DEBUG: Sorting results by letter_date")
+            try:
+                def parse_date(date_str):
+                    try:
+                        if not date_str or date_str == 'Unknown Date':
+                            return datetime(1900, 1, 1)
+                        
+                        date_formats = [
+                            '%B %d, %Y',      # July 11, 2025, August 28, 2025
+                            '%m/%d/%Y',       # 07/11/2025, 08/28/2025
+                            '%Y-%m-%d',       # 2025-07-11, 2025-08-28
+                        ]
+                        
+                        for fmt in date_formats:
+                            try:
+                                return datetime.strptime(date_str, fmt)
+                            except ValueError:
+                                continue
+                        
+                        return datetime(1900, 1, 1)
+                    except:
+                        return datetime(1900, 1, 1)
+                
+                def safe_sort_key(x):
+                    metadata = x.get('metadata', {})
+                    letter_date = metadata.get('letter_date', '') if metadata else ''
+                    return parse_date(letter_date)
+                
+                sources.sort(key=safe_sort_key, reverse=True)
+                print(f"🔍 DEBUG: Sorted sources by date, most recent first")
+                
             except Exception as sort_error:
                 print(f"⚠️ DEBUG: Error sorting by date: {sort_error}")
-                # Continue without sorting if there's an error
         
-        print(f"🔍 DEBUG: Returning {len(sources)} FDA warning letter sources")
+        print(f"🔍 DEBUG: Returning {len(sources)} FDA warning letter sources from Milvus")
         return sources
         
     except Exception as e:
-        print(f"❌ DEBUG: Error in FDA pgvector search: {e}")
+        print(f"❌ DEBUG: Error in FDA Milvus search: {e}")
         import traceback
         traceback.print_exc()
         return []
@@ -284,7 +292,7 @@ async def search_rss_feeds_pgvector(query_embedding: List[float], search_limit: 
             rpc_url = f"{supabase_url}/rest/v1/rpc/search_rss_feeds"
             rpc_payload = {
                 "query_embedding": embedding_list,
-                "match_threshold": 0.1,
+                "match_threshold": 0.3,  # Increased from 0.1 to 0.3 for better quality
                 "match_count": search_limit
             }
             
@@ -406,171 +414,11 @@ async def search_similar_documents(query: str, collection_name: str = "rss_feeds
             return get_fallback_sources(query, target_collection, top_k)
         print(f"🔍 DEBUG: Embedding successful, proceeding with search")
 
-        # Use Supabase pgvector for search
+        # Use Milvus for FDA warning letters, Supabase for RSS feeds
         if target_collection == "fda_warning_letters":
-            return await search_fda_warning_letters_pgvector(query_embedding, search_limit)
+            return await search_fda_warning_letters_milvus(query_embedding, search_limit)
         else:
             return await search_rss_feeds_pgvector(query_embedding, search_limit)
-        
-        # Convert to float32 array (Zilliz expects this)
-        query_embedding_float32 = [float(x) for x in query_embedding]
-        
-        # Zilliz Cloud V2 search payload structure
-        search_data = {
-            "collectionName": target_collection,
-            "data": [query_embedding_float32],  # Note: embedding should be wrapped in a list
-            "limit": search_limit,
-            "outputFields": output_fields,
-            "metricType": "COSINE",
-            "params": {"nprobe": 10},
-            "fieldName": "text_vector"
-        }
-        
-        print(f"🔍 DEBUG: Attempting vector search...")
-        print(f"🔍 DEBUG: Query: {query}")
-        print(f"🔍 DEBUG: Collection: {target_collection}")
-        print(f"🔍 DEBUG: Search data: {json.dumps(search_data, indent=2)}")
-
-        # Try different endpoints until one works with shorter timeout for Vercel
-        search_successful = False
-        for endpoint in search_endpoints:
-            try:
-                print(f"🔍 DEBUG: Trying endpoint: {endpoint}")
-                response = requests.post(endpoint, json=search_data, headers=headers, timeout=15)
-                print(f"🔍 DEBUG: Endpoint {endpoint} response status: {response.status_code}")
-                
-                if response.status_code == 200:
-                    print(f"✅ DEBUG: Search successful via {endpoint}")
-                    search_successful = True
-                    break
-                else:
-                    print(f"❌ DEBUG: Endpoint {endpoint} failed: {response.status_code}")
-                    print(f"❌ DEBUG: Response text: {response.text[:200]}")
-                    
-            except requests.exceptions.Timeout:
-                print(f"⏰ DEBUG: Endpoint {endpoint} timed out")
-                continue
-            except Exception as endpoint_error:
-                print(f"❌ DEBUG: Endpoint {endpoint} error: {str(endpoint_error)}")
-                continue
-        
-        if not search_successful:
-            print(f"❌ DEBUG: All search endpoints failed, using fallback data")
-            return get_fallback_sources(query, target_collection, top_k)
-        
-        result = response.json()
-        pretty_json_string = json.dumps(result, indent=4)
-        print(f'🔍 DEBUG: Milvus raw response: {pretty_json_string}')
-        
-        # Check if this is an error response
-        if 'code' in result and result.get('code') != 0:
-            print(f"❌ DEBUG: Milvus API returned error: Code {result.get('code')}, Message: {result.get('message')}")
-            print("🔄 DEBUG: Using fallback data due to API error")
-            return get_fallback_sources(query, target_collection, top_k)
-
-        sources = []
-        if 'data' in result and result['data']:
-            print(f"🔍 DEBUG: Found 'data' field in response with {len(result['data'])} items")
-            
-            for hit in result['data']:
-                try:
-                    # Create metadata based on collection schema
-                    if target_collection == "fda_warning_letters":
-                        # FDA Warning Letters metadata
-                        metadata = {
-                            "company_name": hit.get('company_name', 'Unknown Company'),
-                            "letter_date": hit.get('letter_date', 'Unknown Date'),
-                            "chunk_type": hit.get('chunk_type', 'Unknown Type'),
-                            "chunk_id": hit.get('chunk_id', 'Unknown Chunk'),
-                            "violations": hit.get('violations', []),
-                            "required_actions": hit.get('required_actions', []),
-                            "systemic_issues": hit.get('systemic_issues', []),
-                            "regulatory_consequences": hit.get('regulatory_consequences', []),
-                            "product_types": hit.get('product_types', []),
-                            "product_categories": hit.get('product_categories', [])
-                        }
-                    else:
-                        # RSS Feeds metadata (default)
-                        metadata = {
-                            "article_title": hit.get('article_title', 'Unknown Title'),
-                            "published_date": hit.get('published_date', 'Unknown Date'),
-                            "feed_name": hit.get('feed_name', 'Unknown Feed'),
-                            "chunk_type": hit.get('chunk_type', 'Unknown Type'),
-                            "companies": hit.get('companies', []),
-                            "products": hit.get('products', []),
-                            "regulations": hit.get('regulations', []),
-                            "regulatory_bodies": hit.get('regulatory_bodies', [])
-                        }
-                    
-                    source_item = {
-                        "title": hit.get('article_title', metadata.get('company_name', 'Unknown Title')),
-                        "content": hit.get('text_content', ''),
-                        "metadata": metadata,
-                        "collection": target_collection
-                    }
-                    sources.append(source_item)
-                    print(f"🔍 DEBUG: Added source: {source_item['title']}")
-                
-                except Exception as e:
-                    print(f"❌ DEBUG: Error parsing hit: {e}")
-                    continue
-            
-            # Sort by date for better relevance
-            if target_collection == "fda_warning_letters":
-                print(f"🔍 DEBUG: Detected latest query, sorting by date")
-                # Sort sources by letter_date in descending order (most recent first)
-                def parse_date(date_str):
-                    try:
-                        # Handle different date formats
-                        if not date_str or date_str == 'Unknown Date':
-                            return datetime(1900, 1, 1)  # Put unknown dates at the end
-                        
-                        # Try different date formats
-                        date_formats = [
-                            '%B %d, %Y',      # July 11, 2025, August 28, 2025
-                            '%m/%d/%Y',       # 07/11/2025, 08/28/2025
-                            '%Y-%m-%d',       # 2025-07-11, 2025-08-28
-                        ]
-                        
-                        for fmt in date_formats:
-                            try:
-                                return datetime.strptime(date_str, fmt)
-                            except ValueError:
-                                continue
-                        
-                        # If no format matches, return a very old date
-                        return datetime(1900, 1, 1)
-                    except:
-                        return datetime(1900, 1, 1)
-                
-                # Sort by date (most recent first)
-                def safe_sort_key(x):
-                    metadata = x.get('metadata', {})
-                    letter_date = metadata.get('letter_date', '') if metadata else ''
-                    return parse_date(letter_date)
-                
-                sources.sort(key=safe_sort_key, reverse=True)
-                print(f"🔍 DEBUG: Sorted sources by date, most recent first")
-                
-                # Show the sorted dates for debugging
-                sorted_dates = [safe_sort_key(x) for x in sources]
-                print(f"🔍 DEBUG: Sorted dates: {[d.strftime('%Y-%m-%d') for d in sorted_dates[:5]]}")
-            
-            # Return all sources up to the limit
-            sources = sources[:top_k]
-            print(f"🔍 DEBUG: Returning {len(sources)} sources to LLM")
-            
-        else:
-            print(f"❌ DEBUG: No 'data' field found in response or empty data")
-            print("🔄 DEBUG: Using fallback data due to empty response")
-            return get_fallback_sources(query, target_collection, top_k)
-        
-        print(f"🔍 DEBUG: Final sources count: {len(sources)}")
-        if sources:
-            pretty_json_string = json.dumps(sources, indent=4)
-            print('🔍 DEBUG: Final sources:', pretty_json_string)
-    
-        return sources
         
     except Exception as e:
         print(f"❌ DEBUG: Error in search_similar_documents: {e}")
